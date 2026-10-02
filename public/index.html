@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mission Control — Hermes AI Team</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◈</span>
+    <div>
+      <h1>Mission Control</h1>
+      <p class="sub">Hermes AI Team</p>
+    </div>
+  </div>
+  <nav id="nav">
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="agents">Agents</button>
+    <button data-view="board">Task Board</button>
+    <button data-view="calendar">Calendar</button>
+    <button data-view="activity">Activity</button>
+    <button data-view="memory">Memory / Knowledge</button>
+    <button data-view="office">2D Office</button>
+  </nav>
+  <div class="topbar-right">
+    <span id="updated"></span>
+    <button id="refresh" title="Refresh now">⟳</button>
+  </div>
+</header>
+
+<main>
+  <section id="view-dashboard" class="view"></section>
+  <section id="view-agents" class="view hidden"></section>
+  <section id="view-board" class="view hidden"></section>
+  <section id="view-calendar" class="view hidden"></section>
+  <section id="view-activity" class="view hidden"></section>
+  <section id="view-memory" class="view hidden"></section>
+  <section id="view-office" class="view hidden"></section>
+</main>
+
+<footer class="foot">
+  <span id="foot-status">—</span> · auto-refresh 30s · data: real Hermes sources
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
