@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Visual Office — Mission Control</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/office-3d.css">
+<style>
+body { margin: 0; background: #0d1117; }
+</style>
+</head>
+<body>
+<div class="iso-office-container" id="iso-container">
+  <div class="iso-loading">Loading office...</div>
+</div>
+
+<div class="iso-room-selector" id="room-selector">
+  <button class="iso-room-btn active" data-room="office">🏢 Office</button>
+  <button class="iso-room-btn" data-room="lounge">🛋️ Lounge</button>
+  <button class="iso-room-btn" data-room="rec">🎮 Rec Room</button>
+  <button class="iso-room-btn" data-room="kitchen">🍳 Kitchen</button>
+</div>
+
+<div class="iso-status-bar" id="status-bar">
+  <h4 style="margin:0 0 8px 0;font-size:14px">Team Status</h4>
+  <div class="iso-status-item"><span class="iso-status-dot working"></span><span>Working: <b id="count-working">0</b></span></div>
+  <div class="iso-status-item"><span class="iso-status-dot idle"></span><span>Idle: <b id="count-idle">0</b></span></div>
+  <div class="iso-status-item"><span class="iso-status-dot offline"></span><span>Offline: <b id="count-offline">0</b></span></div>
+</div>
+
+<div class="iso-controls">
+  <button onclick="isoOffice.rotate(-15)">↺ Rotate Left</button>
+  <button onclick="isoOffice.rotate(15)">Rotate Right ↻</button>
+  <button onclick="isoOffice.reset()">Reset View</button>
+</div>
+
+<script src="/office-3d.js"></script>
+</body>
+</html>

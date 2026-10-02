@@ -1,0 +1,312 @@
+/* ============================ 3D ISOMETRIC OFFICE ============================ */
+
+.iso-office-container {
+  width: 100%;
+  height: 600px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 60%, #90EE90 60%, #228B22 100%);
+  border-radius: 12px;
+  border: 2px solid var(--border);
+}
+
+.iso-office-scene {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
+}
+
+/* Isometric projection container */
+.iso-room {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+/* Base floor */
+.iso-floor {
+  position: absolute;
+  width: 400px;
+  height: 200px;
+  background: #DEB887;
+  transform: rotateX(60deg) rotateZ(45deg);
+  transform-origin: center center;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+}
+
+/* Walls */
+.iso-wall {
+  position: absolute;
+  background: #F5F5DC;
+  border: 1px solid #DDD;
+}
+
+.iso-wall-back {
+  width: 400px;
+  height: 150px;
+  transform: translateZ(75px);
+}
+
+.iso-wall-left {
+  width: 200px;
+  height: 150px;
+  transform: rotateY(90deg) translateZ(-100px) translateX(-100px);
+}
+
+.iso-wall-right {
+  width: 200px;
+  height: 150px;
+  transform: rotateY(-90deg) translateZ(300px) translateX(100px);
+}
+
+/* Furniture base */
+.iso-furniture {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+/* Desk */
+.iso-desk {
+  width: 60px;
+  height: 40px;
+  background: #8B4513;
+  position: absolute;
+  transform: rotateX(60deg) rotateZ(45deg);
+}
+
+.iso-desk-top {
+  position: absolute;
+  width: 60px;
+  height: 40px;
+  background: #A0522D;
+  transform: translateZ(30px);
+}
+
+/* Monitor */
+.iso-monitor {
+  position: absolute;
+  width: 20px;
+  height: 15px;
+  background: #1a202c;
+  transform: translateZ(45px) translateY(-15px);
+}
+
+.iso-monitor-screen {
+  position: absolute;
+  width: 16px;
+  height: 11px;
+  background: #4da3ff;
+  transform: translateZ(46px) translateY(-14px);
+  opacity: 0.8;
+}
+
+/* Agent avatar - 3D isometric style */
+.iso-agent {
+  position: absolute;
+  width: 24px;
+  height: 32px;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.iso-agent:hover {
+  transform: translateZ(10px) scale(1.1);
+}
+
+/* Agent body parts */
+.iso-agent-head {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: #FFDAB9;
+  border-radius: 50%;
+  top: 0;
+  left: 4px;
+  transform: translateZ(60px);
+}
+
+.iso-agent-body {
+  position: absolute;
+  width: 20px;
+  height: 24px;
+  background: var(--agent-color, #4da3ff);
+  top: 12px;
+  left: 2px;
+  transform: translateZ(30px);
+  border-radius: 4px;
+}
+
+/* Speech bubble */
+.iso-speech {
+  position: absolute;
+  background: white;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transform: translateZ(80px);
+  top: -20px;
+  left: 50%;
+  translate: -50% 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.iso-agent:hover .iso-speech,
+.iso-agent.active .iso-speech {
+  opacity: 1;
+}
+
+.iso-speech::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  translate: -50% 0;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid white;
+}
+
+/* Status indicator */
+.iso-status {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  top: -4px;
+  right: 0;
+  transform: translateZ(70px);
+}
+
+.iso-status.working { background: #48bb78; box-shadow: 0 0 8px #48bb78; }
+.iso-status.idle { background: #ecc94b; box-shadow: 0 0 8px #ecc94b; }
+.iso-status.offline { background: #718096; }
+
+/* Room labels */
+.iso-room-label {
+  position: absolute;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  transform: translateZ(100px);
+  pointer-events: none;
+}
+
+/* Navigation controls */
+.iso-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+}
+
+.iso-controls button {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.iso-controls button:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* Room selector */
+.iso-room-selector {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+}
+
+.iso-room-btn {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.iso-room-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Status bar */
+.iso-status-bar {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 180px;
+  z-index: 100;
+}
+
+.iso-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.iso-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.iso-status-dot.working { background: #48bb78; }
+.iso-status-dot.idle { background: #ecc94b; }
+.iso-status-dot.offline { background: #718096; }
+
+/* Loading state */
+.iso-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .iso-office-container {
+    height: 400px;
+  }
+  
+  .iso-status-bar {
+    top: auto;
+    bottom: 60px;
+    right: 10px;
+    left: 10px;
+    min-width: auto;
+  }
+}

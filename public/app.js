@@ -892,6 +892,24 @@ function viewFromHash() {
   const h = location.hash.replace('#', '');
   return VIEWS[h] ? h : 'dashboard';
 }
+
+// 3D Office view — loads standalone page in iframe
+async function renderOffice3D(el) {
+  el.innerHTML = `
+    <h2>3D Visual Office</h2>
+    <p class="desc">Isometric 3D office with real-time agent data. Drag to rotate, scroll to zoom.</p>
+    <div style="margin-top:14px">
+      <iframe src="/office-3d.html" style="width:100%;height:650px;border:none;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3)"></iframe>
+    </div>
+    <p class="muted" style="margin-top:12px;font-size:12px">
+      Data sources: <a href="/api/agents" target="_blank">/api/agents</a> · 
+      <a href="/api/dashboard" target="_blank">/api/dashboard</a> · 
+      <a href="/api/activity" target="_blank">/api/activity</a>
+    </p>`;
+}
+
+VIEWS.office3d = renderOffice3D;
+
 window.addEventListener('hashchange', () => showView(viewFromHash()));
 
 setInterval(() => { if (document.visibilityState === 'visible') refreshCurrent(); }, REFRESH_MS);
