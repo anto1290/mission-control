@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export interface Profile {
   name: string;
@@ -76,7 +76,7 @@ interface ApiContextType {
 
 const ApiContext = createContext<ApiContextType | null>(null);
 
-export function ApiProvider({ children }: { children: React.ReactNode }) {
+export function ApiProvider({ children }: { children: ReactNode }) {
   const [runtime, setRuntime] = useState<RuntimeData | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
