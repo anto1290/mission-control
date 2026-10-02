@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruang — 3D Virtual Office</title>
+<link rel="stylesheet" href="/ruang.css">
+<style>
+body { margin: 0; background: #0b0e0c; }
+</style>
+</head>
+<body>
+<div class="app-container" id="app">
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <div class="brand-icon">◆</div>
+        <span>RUANG <small style="font-size:10px;color:var(--text-secondary)">HERMES 3D</small></span>
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-view="office">Office</button>
+        <button class="nav-tab" data-view="dashboard">Dashboard</button>
+        <button class="nav-tab" data-view="agents">Agents</button>
+        <button class="nav-tab" data-view="board">Tasks</button>
+        <button class="nav-tab" data-view="calendar">Calendar</button>
+        <button class="nav-tab" data-view="activity">Activity</button>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <span class="sync-status" id="sync-status">CONNECTING...</span>
+      <button class="refresh-btn" onclick="ruang.refresh()">↻ REFRESH</button>
+    </div>
+  </header>
+
+  <!-- Office View -->
+  <main class="office-view" id="office-view">
+    <div class="office-canvas-container">
+      <canvas id="office-canvas" class="office-canvas"></canvas>
+    </div>
+    
+    <!-- Room Selector -->
+    <div class="room-overlay" id="room-selector">
+      <button class="room-btn active" data-room="workspace">
+        <span class="room-btn-icon">🏢</span>
+        <span>Workspace</span>
+      </button>
+      <button class="room-btn" data-room="lounge">
+        <span class="room-btn-icon">🛋️</span>
+        <span>Lounge</span>
+      </button>
+      <button class="room-btn" data-room="recreation">
+        <span class="room-btn-icon">🎮</span>
+        <span>Recreation</span>
+      </button>
+      <button class="room-btn" data-room="kitchen">
+        <span class="room-btn-icon">🍳</span>
+        <span>Kitchen</span>
+      </button>
+    </div>
+    
+    <!-- Status Panel -->
+    <div class="status-panel" id="status-panel">
+      <h3>Team Status</h3>
+      <div class="status-row">
+        <span><span class="status-dot working"></span>Working</span>
+        <strong id="count-working">0</strong>
+      </div>
+      <div class="status-row">
+        <span><span class="status-dot idle"></span>Idle</span>
+        <strong id="count-idle">0</strong>
+      </div>
+      <div class="status-row">
+        <span><span class="status-dot offline"></span>Offline</span>
+        <strong id="count-offline">0</strong>
+      </div>
+    </div>
+    
+    <!-- Controls -->
+    <div class="controls">
+      <button class="control-btn" onclick="ruang.rotate(-15)">↺ Rotate Left</button>
+      <button class="control-btn" onclick="ruang.rotate(15)">Rotate Right ↻</button>
+      <button class="control-btn" onclick="ruang.reset()">Reset View</button>
+    </div>
+    
+    <!-- Agent Tooltip -->
+    <div class="agent-tooltip" id="agent-tooltip">
+      <div class="agent-tooltip-header">
+        <div class="agent-avatar" id="tooltip-avatar">👤</div>
+        <div>
+          <div class="agent-name" id="tooltip-name">Agent</div>
+          <div class="agent-role" id="tooltip-role">Role</div>
+        </div>
+      </div>
+      <div class="agent-status" id="tooltip-status">
+        <span class="status-dot" id="tooltip-dot"></span>
+        <span id="tooltip-state">Idle</span>
+      </div>
+      <div class="agent-task" id="tooltip-task">No active task</div>
+    </div>
+    
+    <!-- Loading -->
+    <div class="loading-overlay" id="loading">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <div>Loading office...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Other Views (hidden by default) -->
+  <main class="office-view hidden" id="dashboard-view">
+    <div style="padding:40px;text-align:center;color:var(--text-secondary)">
+      <h2>Dashboard</h2>
+      <p>Coming soon...</p>
+    </div>
+  </main>
+  
+  <main class="office-view hidden" id="agents-view">
+    <div style="padding:40px;text-align:center;color:var(--text-secondary)">
+      <h2>Agents</h2>
+      <p>Agent details coming soon...</p>
+    </div>
+  </main>
+  
+  <main class="office-view hidden" id="board-view">
+    <div style="padding:40px;text-align:center;color:var(--text-secondary)">
+      <h2>Task Board</h2>
+      <p>Task board coming soon...</p>
+    </div>
+  </main>
+  
+  <main class="office-view hidden" id="calendar-view">
+    <div style="padding:40px;text-align:center;color:var(--text-secondary)">
+      <h2>Calendar</h2>
+      <p>Calendar coming soon...</p>
+    </div>
+  </main>
+  
+  <main class="office-view hidden" id="activity-view">
+    <div style="padding:40px;text-align:center;color:var(--text-secondary)">
+      <h2>Activity</h2>
+      <p>Activity feed coming soon...</p>
+    </div>
+  </main>
+</div>
+
+<script src="/ruang.js"></script>
+</body>
+</html>
