@@ -575,50 +575,105 @@ function renderPixelRoom(room) {
     svg += `<rect x="60" y="96" width="80" height="12" fill="${COLORS.rug}"/>`;
     svg += `<rect x="62" y="98" width="76" height="8" fill="#8b5e3c"/>`;
     
-  } else { // lounge
-    // Floor
-    svg += `<rect x="0" y="80" width="${W}" height="60" fill="#744210"/>`;
-    svg += `<rect x="0" y="80" width="${W}" height="4" fill="#5c3317"/>`;
-    // Wall
-    svg += `<rect x="0" y="0" width="${W}" height="80" fill="#553c2a"/>`;
-    svg += `<rect x="0" y="0" width="${W}" height="4" fill="#6b4c3a"/>`;
-    svg += `<rect x="0" y="76" width="${W}" height="4" fill="#6b4c3a"/>`;
+  } else { // lounge - improved pixel art style
+    // Floor with plank lines
+    svg += `<rect x="0" y="80" width="${W}" height="60" fill="#8b6f47"/>`;
+    svg += `<rect x="0" y="80" width="${W}" height="2" fill="#6b5235"/>`; // base shadow
+    // Plank lines
+    for (let i = 0; i < 60; i += 12) {
+      svg += `<rect x="0" y="${80 + i}" width="${W}" height="1" fill="#7a5f3a"/>`;
+    }
+    // Floor edge
+    svg += `<rect x="0" y="138" width="${W}" height="2" fill="#5a4228"/>`;
     
-    // Large window
-    svg += `<rect x="60" y="16" width="80" height="40" fill="${COLORS.windowFrame}"/>`;
-    svg += `<rect x="64" y="20" width="72" height="32" fill="${COLORS.window}"/>`;
-    svg += `<rect x="98" y="20" width="2" height="32" fill="${COLORS.windowFrame}"/>`;
-    svg += `<rect x="64" y="34" width="72" height="2" fill="${COLORS.windowFrame}"/>`;
-    svg += `<rect x="68" y="24" width="28" height="8" fill="${COLORS.windowPane}"/>`;
-    svg += `<rect x="108" y="24" width="28" height="8" fill="${COLORS.windowPane}"/>`;
+    // Wall (dark purple-gray)
+    svg += `<rect x="0" y="0" width="${W}" height="80" fill="#4a3f5c"/>`;
+    svg += `<rect x="0" y="0" width="${W}" height="4" fill="#5a4f6c"/>`; // wall top
+    svg += `<rect x="0" y="76" width="${W}" height="4" fill="#3a2f4c"/>`; // wall bottom
     
-    // TV
-    svg += `<rect x="160" y="24" width="32" height="24" fill="#1a202c"/>`;
-    svg += `<rect x="162" y="26" width="28" height="20" fill="#2d3748"/>`;
-    svg += `<rect x="170" y="30" width="12" height="8" fill="rgba(77,163,255,0.4)"/>`;
-    svg += `<rect x="172" y="48" width="8" height="4" fill="#4a5568"/>`;
+    // Two windows (left and right of door)
+    // Left window
+    svg += `<rect x="16" y="12" width="32" height="32" fill="#2d2d3a"/>`; // frame
+    svg += `<rect x="20" y="16" width="24" height="24" fill="#87ceeb"/>`; // glass
+    svg += `<rect x="30" y="16" width="2" height="24" fill="#2d2d3a"/>`; // vertical divider
+    svg += `<rect x="20" y="26" width="24" height="2" fill="#2d2d3a"/>`; // horizontal divider
+    svg += `<rect x="22" y="18" width="8" height="6" fill="#b8e4f7"/>`; // reflection
+    svg += `<rect x="34" y="18" width="8" height="6" fill="#b8e4f7"/>`;
+    svg += `<rect x="18" y="44" width="28" height="2" fill="#2d2d3a"/>`; // sill
     
-    // Sofa
-    svg += `<rect x="20" y="64" width="48" height="16" fill="${COLORS.sofa}"/>`;
-    svg += `<rect x="20" y="52" width="48" height="12" fill="${COLORS.sofaBack}"/>`;
-    svg += `<rect x="16" y="64" width="4" height="16" fill="${COLORS.sofaArm}"/>`;
-    svg += `<rect x="64" y="64" width="4" height="16" fill="${COLORS.sofaArm}"/>`;
-    svg += `<rect x="24" y="80" width="4" height="8" fill="#4a3015"/>`;
-    svg += `<rect x="56" y="80" width="4" height="8" fill="#4a3015"/>`;
+    // Right window
+    svg += `<rect x="152" y="12" width="32" height="32" fill="#2d2d3a"/>`;
+    svg += `<rect x="156" y="16" width="24" height="24" fill="#87ceeb"/>`;
+    svg += `<rect x="166" y="16" width="2" height="24" fill="#2d2d3a"/>`;
+    svg += `<rect x="156" y="26" width="24" height="2" fill="#2d2d3a"/>`;
+    svg += `<rect x="158" y="18" width="8" height="6" fill="#b8e4f7"/>`;
+    svg += `<rect x="170" y="18" width="8" height="6" fill="#b8e4f7"/>`;
+    svg += `<rect x="154" y="44" width="28" height="2" fill="#2d2d3a"/>`;
     
-    // Coffee table
-    svg += `<rect x="76" y="72" width="24" height="4" fill="${COLORS.deskTop}"/>`;
-    svg += `<rect x="80" y="76" width="4" height="8" fill="${COLORS.deskLeg}"/>`;
-    svg += `<rect x="92" y="76" width="4" height="8" fill="${COLORS.deskLeg}"/>`;
+    // Door (center)
+    svg += `<rect x="82" y="20" width="36" height="56" fill="#3a2a1a"/>`; // frame
+    svg += `<rect x="86" y="24" width="28" height="48" fill="#6b4423"/>`; // door
+    svg += `<rect x="108" y="44" width="4" height="4" fill="#c9a227"/>`; // handle
+    svg += `<rect x="86" y="48" width="28" height="2" fill="#5a3a1a"/>`; // panel line
+    svg += `<rect x="86" y="72" width="28" height="2" fill="#5a3a1a"/>`;
+    svg += `<rect x="86" y="76" width="28" height="2" fill="#2d2d3a"/>`; // shadow
     
-    // Plant
-    svg += `<rect x="12" y="108" width="8" height="8" fill="${COLORS.pot}"/>`;
-    svg += `<rect x="14" y="100" width="4" height="8" fill="${COLORS.plant}"/>`;
-    svg += `<rect x="18" y="102" width="4" height="6" fill="${COLORS.plantDark}"/>`;
+    // Clock (above door)
+    svg += `<rect x="92" y="6" width="16" height="16" fill="#e2e8f0"/>`;
+    svg += `<rect x="94" y="8" width="12" height="12" fill="#f7fafc"/>`;
+    svg += `<rect x="99" y="8" width="2" height="5" fill="#2d3748"/>`; // hour hand
+    svg += `<rect x="99" y="8" width="5" height="2" fill="#2d3748"/>`; // minute hand
+    svg += `<rect x="99" y="11" width="2" height="2" fill="#c9a227"/>`; // center
     
-    // Rug
-    svg += `<rect x="50" y="96" width="60" height="10" fill="#5c3317"/>`;
-    svg += `<rect x="52" y="98" width="56" height="6" fill="#744210"/>`;
+    // TV (center below door, wall-mounted)
+    svg += `<rect x="86" y="52" width="28" height="20" fill="#1a202c"/>`; // TV body
+    svg += `<rect x="88" y="54" width="24" height="16" fill="#2d3748"/>`; // screen
+    svg += `<rect x="92" y="58" width="8" height="4" fill="#ff6b9d"/>`; // pink lines
+    svg += `<rect x="102" y="62" width="6" height="3" fill="#4da3ff"/>`; // blue lines
+    svg += `<rect x="94" y="66" width="12" height="2" fill="#48bb78"/>`; // green line
+    svg += `<rect x="96" y="72" width="8" height="4" fill="#4a5568"/>`; // stand
+    
+    // Blue couch (facing TV)
+    svg += `<rect x="16" y="68" width="56" height="12" fill="#4299e1"/>`; // seat
+    svg += `<rect x="16" y="60" width="56" height="8" fill="#3182ce"/>`; // back
+    svg += `<rect x="12" y="68" width="4" height="16" fill="#2b6cb0"/>`; // arm left
+    svg += `<rect x="68" y="68" width="4" height="16" fill="#2b6cb0"/>`; // arm right
+    svg += `<rect x="20" y="80" width="4" height="6" fill="#1a4a7a"/>`; // leg
+    svg += `<rect x="60" y="80" width="4" height="6" fill="#1a4a7a"/>`;
+    svg += `<rect x="16" y="80" width="56" height="2" fill="#1a365d"/>`; // shadow
+    
+    // Purple armchair (left side)
+    svg += `<rect x="4" y="64" width="16" height="12" fill="#9f7aea"/>`; // seat
+    svg += `<rect x="4" y="56" width="16" height="8" fill="#805ad5"/>`; // back
+    svg += `<rect x="0" y="64" width="4" height="12" fill="#6b46c1"/>`; // arm
+    svg += `<rect x="8" y="76" width="3" height="6" fill="#44337a"/>`; // leg
+    svg += `<rect x="18" y="76" width="3" height="6" fill="#44337a"/>`;
+    
+    // Coffee table (in front of couch)
+    svg += `<rect x="28" y="84" width="32" height="4" fill="#a07818"/>`; // top
+    svg += `<rect x="32" y="88" width="3" height="8" fill="#6b4423"/>`; // leg
+    svg += `<rect x="55" y="88" width="3" height="8" fill="#6b4423"/>`;
+    svg += `<rect x="28" y="96" width="32" height="2" fill="#2d2d3a"/>`; // shadow
+    
+    // Blue rug (under coffee table)
+    svg += `<rect x="24" y="98" width="40" height="12" fill="#4299e1"/>`;
+    svg += `<rect x="26" y="100" width="36" height="8" fill="#63b3ed"/>`;
+    
+    // Plants (corners)
+    // Left plant
+    svg += `<rect x="6" y="108" width="10" height="10" fill="#8b6914"/>`; // pot
+    svg += `<rect x="8" y="96" width="6" height="12" fill="#48bb78"/>`; // leaves
+    svg += `<rect x="14" y="98" width="6" height="8" fill="#2f855a"/>`;
+    svg += `<rect x="10" y="92" width="4" height="4" fill="#48bb78"/>`; // top
+    
+    // Right plant
+    svg += `<rect x="184" y="108" width="10" height="10" fill="#8b6914"/>`;
+    svg += `<rect x="186" y="96" width="6" height="12" fill="#48bb78"/>`;
+    svg += `<rect x="192" y="98" width="6" height="8" fill="#2f855a"/>`;
+    svg += `<rect x="188" y="92" width="4" height="4" fill="#48bb78"/>`;
+    
+    // Baseboard shadow
+    svg += `<rect x="0" y="76" width="${W}" height="4" fill="#2d2d3a"/>`;
   }
   
   // Render agents
@@ -634,15 +689,23 @@ function renderPixelRoom(room) {
     }
   });
   
-  // Idle agents in lounge
+  // Idle agents on couch in lounge
   idleAgents.forEach((agent, i) => {
-    const pos = i === 0 ? {x: 28, y: 48} : {x: 84, y: 64};
-    svg += renderAgentPixel(pos.x, pos.y, agent);
+    // Position along couch (y=56 is top of couch back)
+    const positions = [
+      { x: 20, y: 52 }, // left on couch
+      { x: 32, y: 52 },
+      { x: 44, y: 52 },
+      { x: 56, y: 52 },
+      { x: 68, y: 52 }, // right on couch
+    ];
+    const pos = positions[i] || positions[0];
+    svg += renderAgentPixelCouch(pos.x, pos.y, agent);
   });
   
-  // Offline agents dimmed
+  // Offline agents dimmed (at desks)
   offlineAgents.forEach((agent, i) => {
-    const pos = [160, 60][i] || 20;
+    const pos = [160, 60, 20][i] || 20;
     svg += renderAgentPixel(pos, 56, agent, true);
   });
   
@@ -680,6 +743,32 @@ function renderAgentPixel(x, y, agent, offline = false) {
       <rect x="${x+12}" y="${y+10}" width="4" height="8" fill="${colors.secondary}"/>
       <!-- Status dot -->
       <rect x="${x+7}" y="${y-4}" width="2" height="2" fill="${statusColor}"/>
+      <!-- Name label -->
+      <rect x="${x+2}" y="${y+22}" width="12" height="4" fill="#1a202c" rx="1"/>
+      <text x="${x+8}" y="${y+25}" text-anchor="middle" fill="${colors.primary}" font-size="3" font-family="monospace">${esc(agent.label).slice(0,6)}</text>
+    </g>`;
+}
+
+function renderAgentPixelCouch(x, y, agent) {
+  const colors = AGENT_COLORS[agent.name] || AGENT_COLORS.default;
+  
+  return `
+    <g class="agent-pixel" data-agent="${agent.name}">
+      <!-- Body (seated, smaller) -->
+      <rect x="${x+3}" y="${y+6}" width="8" height="10" fill="${colors.primary}"/>
+      <!-- Head -->
+      <rect x="${x+4}" y="${y+0}" width="6" height="6" fill="${colors.accent}"/>
+      <!-- Eyes -->
+      <rect x="${x+6}" y="${y+2}" width="2" height="2" fill="#0b0f14"/>
+      <rect x="${x+10}" y="${y+2}" width="2" height="2" fill="#0b0f14"/>
+      <!-- Arms (relaxed) -->
+      <rect x="${x}" y="${y+8}" width="3" height="6" fill="${colors.secondary}"/>
+      <rect x="${x+11}" y="${y+8}" width="3" height="6" fill="${colors.secondary}"/>
+      <!-- Status dot -->
+      <rect x="${x+5}" y="${y-3}" width="2" height="2" fill="${colors.primary}"/>
+      <!-- Name label -->
+      <rect x="${x+1}" y="${y+16}" width="14" height="4" fill="#1a202c"/>
+      <text x="${x+8}" y="${y+19}" text-anchor="middle" fill="${colors.primary}" font-size="3" font-family="monospace">${esc(agent.label).slice(0,6)}</text>
     </g>`;
 }
 
