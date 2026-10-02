@@ -241,7 +241,7 @@ export async function getChannels(now?: number) {
       for (const [name, info] of Object.entries(status.platforms || {})) {
         channels.push({
           name,
-          status: info.state === 'connected' ? 'Connected' : 'Disconnected'
+          status: (info as any).state === 'connected' ? 'Connected' : 'Disconnected'
         });
       }
       
