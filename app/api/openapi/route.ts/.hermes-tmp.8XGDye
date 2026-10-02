@@ -1,9 +1,0 @@
-import { NextResponse } from 'next/server';
-
-export async function GET() {
-  // Return OpenAPI spec from file
-  const fs = await import('node:fs');
-  const path = await import('node:path');
-  const spec = fs.readFileSync(path.join(process.cwd(), 'server', 'openapi.json'), 'utf8');
-  return NextResponse.json(JSON.parse(spec));
-}
