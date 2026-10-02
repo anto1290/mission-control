@@ -1,42 +1,55 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { HermesOAuth, getOAuthClient } from '@/lib/oauth';
+import { HermesClient, getHermesClient } from '@/lib/hermes-client';
 
 interface AuthContextType {
-  oauth: HermesOAuth;
+  client: HermesClient;
   authenticated: boolean;
   loading: boolean;
   error: string | null;
+  config: {
+    dashboardUrl: string;
+    provider: string;
+    profile: string;
+    hasToken: boolean;
+  };
   login: (username: string, password: string) => Promise<boolean>;
-  logout: () => Promise<void>;
-  startOAuth: (provider: string, profile?: string) => Promise<any>;
-  pollOAuthStatus: (provider: string, sessionId: string) => Promise<boolean>;
+  logout: () => void;
+  refreshAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children, dashboardUrl }: { children: ReactNode; dashboardUrl?: string }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
   
-  const oauth = getOAuthClient(dashboardUrl);
+  const client = getHermesClient();
 
   // Check auth status on mount
   useEffect(() => {
-    checkAuth();
+    refreshAuth();
   }, []);
 
-  const checkAuth = async () => {
+  const refreshAuth = async () => {
+    setLoading(true);
     try {
-      const status = await oauth.getAuthStatus();
+      // If we have a token configured, we're authenticated
+      const cfg = client.getConfig();
+      if (cfg.token) {
+        setAuthenticated(true);
+        setLoading(false);
+        return;
+      }
+
+      // Otherwise check via /api/auth/me
+      const status = await client.getAuthStatus();
       setAuthenticated(status.authenticated);
-      setAuthChecked(true);
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Auth check failed');
       setAuthenticated(false);
-      setAuthChecked(true);
     } finally {
       setLoading(false);
     }
@@ -46,9 +59,9 @@ export function AuthProvider({ children, dashboardUrl }: { children: ReactNode; 
     setError(null);
     setLoading(true);
     try {
-      const success = await oauth.loginPassword(username, password);
+      const success = await client.loginPassword(username, password);
       if (success) {
-        await checkAuth();
+        await refreshAuth();
         return true;
       }
       setError('Invalid credentials');
@@ -61,38 +74,27 @@ export function AuthProvider({ children, dashboardUrl }: { children: ReactNode; 
     }
   };
 
-  const logout = async () => {
-    try {
-      await fetch(`${dashboardUrl || 'http://localhost:9119'}/auth/logout`, {
-        method: 'POST',
-      });
-      setAuthenticated(false);
-      setAuthChecked(false);
-    } catch (err) {
-      console.error('Logout failed:', err);
-    }
+  const logout = () => {
+    setAuthenticated(false);
   };
 
-  const startOAuth = async (provider: string, profile?: string) => {
-    setError(null);
-    return oauth.startOAuth(provider, profile);
-  };
-
-  const pollOAuthStatus = async (provider: string, sessionId: string) => {
-    const result = await oauth.pollStatus(provider, sessionId);
-    return result.status === 'connected';
-  };
+  const config = client.getConfig();
 
   return (
     <AuthContext.Provider value={{
-      oauth,
+      client,
       authenticated,
       loading,
       error,
+      config: {
+        dashboardUrl: config.dashboardUrl,
+        provider: config.provider || 'unknown',
+        profile: config.profile || 'unknown',
+        hasToken: !!config.token,
+      },
       login,
       logout,
-      startOAuth,
-      pollOAuthStatus,
+      refreshAuth,
     }}>
       {children}
     </AuthContext.Provider>
