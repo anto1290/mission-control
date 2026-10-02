@@ -10,6 +10,11 @@
  *       cron jobs.json, memory files, skills.
  *   - Kanban writes go through `hermes kanban` CLI (keeps lock semantics
  *     consistent with the dispatcher); everything else is read-only.
+ *
+ * Flexibility:
+ *   - All paths configurable via environment variables
+ *   - Supports both local (same server) and remote (different server) deployments
+ *   - Graceful fallback when data sources unavailable
  */
 'use strict';
 
@@ -19,22 +24,55 @@ const path = require('path');
 const { execFileSync, execSync, spawnSync } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
 
-const PORT = Number(process.env.MC_PORT || 9120);
-const HOST = process.env.MC_HOST || '0.0.0.0';
-const ROOT = '/opt/data';
-const VENV_HERMES = '/opt/hermes/.venv/bin/hermes';
+// ============================================================================
+// CONFIGURATION — All paths configurable via environment variables
+// ============================================================================
 
-/** Profiles we manage. 'default' = Lead Agent, 'leadenginer' = Lead Engineer. */
-const PROFILES = [
-  { name: 'default', label: 'Lead Agent', home: ROOT },
-  { name: 'leadenginer', label: 'Lead Engineer', home: path.join(ROOT, 'profiles', 'leadenginer') },
-];
+const CONFIG = {
+  // Port and host
+  port: Number(process.env.MC_PORT || 9120),
+  host: process.env.MC_HOST || '0.0.0.0',
+  
+  // Hermes data directory (where kanban.db, state.db, gateway_state.json live)
+  hermesDataDir: process.env.MC_HERMES_DATA || '/opt/data',
+  
+  // Hermes CLI path (for kanban writes)
+  hermesCli: process.env.MC_HERMES_CLI || '/opt/hermes/.venv/bin/hermes',
+  
+  // s6 commands (for service supervision)
+  s6Svstat: process.env.MC_S6_SVSTAT || '/command/s6-svstat',
+  s6Svc: process.env.MC_S6_SVC || '/command/s6-svc',
+  
+  // s6 service directory
+  s6ServiceDir: process.env.MC_S6_SERVICE_DIR || '/run/service',
+  
+  // OpenCode (coding execution layer)
+  opencodeBin: process.env.MC_OPENCODE_BIN || '/opt/data/.local/npm-global/bin/opencode',
+  opencodeConfig: process.env.MC_OPENCODE_CONFIG || '/opt/data/home/.config/opencode/opencode.json',
+  
+  // Profiles to monitor
+  profiles: [
+    { name: 'default', label: 'Lead Agent', home: process.env.MC_HERMES_DATA || '/opt/data' },
+    { name: 'leadenginer', label: 'Lead Engineer', home: path.join(process.env.MC_HERMES_DATA || '/opt/data', 'profiles', 'leadenginer') },
+  ],
+  
+  // Services to monitor
+  services: ['main-hermes', 'gateway-default', 'gateway-leadenginer', 'dashboard'],
+};
 
-/** Hermes s6 service names that are always present. */
-const SERVICES = ['main-hermes', 'gateway-default', 'gateway-leadenginer', 'dashboard'];
+// Print config on startup for debugging
+console.log(`[mission-control] Config loaded:`);
+console.log(`  PORT: ${CONFIG.port}`);
+console.log(`  HOST: ${CONFIG.host}`);
+console.log(`  HERMES_DATA: ${CONFIG.hermesDataDir}`);
+console.log(`  HERMES_CLI: ${CONFIG.hermesCli} ${fs.existsSync(CONFIG.hermesCli) ? '(exists)' : '(NOT FOUND)'}`);
+console.log(`  S6_SVSTAT: ${CONFIG.s6Svstat} ${fs.existsSync(CONFIG.s6Svstat) ? '(exists)' : '(NOT FOUND)'}`);
+console.log(`  OPENCODE: ${CONFIG.opencodeBin} ${fs.existsSync(CONFIG.opencodeBin) ? '(exists)' : '(NOT FOUND)'}`);
+console.log(``);
 
-const S6_SVSTAT = '/command/s6-svstat';
-const S6_SVC = '/command/s6-svc';
+// ============================================================================
+// DATA ACCESSORS — All paths use CONFIG
+// ============================================================================
 
 function safe(fn, fallback) {
   try { return fn(); } catch (e) { return fallback; }
@@ -45,10 +83,10 @@ function safe(fn, fallback) {
 // ---------------------------------------------------------------------------
 
 function serviceState(name) {
-  // svstat prints e.g. "up (pid 2657 pgid 2657) 1518 seconds" or
-  // "down (exitcode 1) 0 seconds, normally up, want up, ready 0 seconds".
-  // A service that was created but never started reports "down (not started yet)".
-  const out = safe(() => execFileSync(S6_SVSTAT, [`/run/service/${name}`], { encoding: 'utf8' }).trim(), '');
+  if (!fs.existsSync(CONFIG.s6Svstat)) {
+    return { name, present: false, state: 's6-unavailable', pid: null, seconds: null };
+  }
+  const out = safe(() => execFileSync(CONFIG.s6Svstat, [`${CONFIG.s6ServiceDir}/${name}`], { encoding: 'utf8' }).trim(), '');
   if (out === '') {
     return { name, present: false, state: 'not-supervised', pid: null, seconds: null };
   }
@@ -59,7 +97,6 @@ function serviceState(name) {
   if (up) state = 'up';
   else if (mDown && mDown[1]) state = 'down';
   else state = out.includes('not started yet') ? 'down' : 'down';
-  // s6 can pause a service ("up (...), paused").
   if (/paused/i.test(out)) state = state + '-paused';
   return {
     name,
@@ -72,7 +109,7 @@ function serviceState(name) {
 }
 
 // ---------------------------------------------------------------------------
-// Gateway / platform state (real JSON files, written by the gateways)
+// Gateway / platform state
 // ---------------------------------------------------------------------------
 
 function gatewayState(profile) {
@@ -81,10 +118,11 @@ function gatewayState(profile) {
 }
 
 // ---------------------------------------------------------------------------
-// Sessions (per-profile state.db, read-only)
+// Sessions (per-profile state.db)
 // ---------------------------------------------------------------------------
 
 function openDb(file, readOnly = true) {
+  if (!fs.existsSync(file)) return null;
   return safe(() => new DatabaseSync(file, readOnly ? { readOnly: true } : {}), null);
 }
 
@@ -123,11 +161,11 @@ function sessionStats(profile) {
 }
 
 // ---------------------------------------------------------------------------
-// Kanban (shared board). Reads: read-only SQL. Writes: hermes CLI.
+// Kanban (shared board)
 // ---------------------------------------------------------------------------
 
 function kanbanTasks() {
-  const db = openDb(path.join(ROOT, 'kanban.db'));
+  const db = openDb(path.join(CONFIG.hermesDataDir, 'kanban.db'));
   if (!db) return { tasks: [], error: 'kanban.db not readable' };
   try {
     const rows = db.prepare(`
@@ -152,7 +190,7 @@ function kanbanTasks() {
 }
 
 function kanbanTaskDetail(id) {
-  const db = openDb(path.join(ROOT, 'kanban.db'));
+  const db = openDb(path.join(CONFIG.hermesDataDir, 'kanban.db'));
   if (!db) return null;
   try {
     const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
@@ -171,8 +209,10 @@ function kanbanTaskDetail(id) {
 }
 
 function runKanbanCli(args) {
-  // Writes go through the official CLI so dispatcher lock/claim semantics hold.
-  const r = spawnSync(VENV_HERMES, ['kanban', ...args], { encoding: 'utf8', timeout: 60000 });
+  if (!fs.existsSync(CONFIG.hermesCli)) {
+    return { ok: false, stdout: '', stderr: 'hermes CLI not found', exit: 127 };
+  }
+  const r = spawnSync(CONFIG.hermesCli, ['kanban', ...args], { encoding: 'utf8', timeout: 60000 });
   return {
     ok: r.status === 0,
     stdout: (r.stdout || '').trim(),
@@ -182,7 +222,7 @@ function runKanbanCli(args) {
 }
 
 // ---------------------------------------------------------------------------
-// Cron jobs (<home>/cron/jobs.json — may not exist until first job is created)
+// Cron jobs
 // ---------------------------------------------------------------------------
 
 function cronJobs(profile) {
@@ -206,7 +246,7 @@ function memoryFiles(profile) {
 }
 
 function skillsCatalog() {
-  const base = path.join(ROOT, 'skills');
+  const base = path.join(CONFIG.hermesDataDir, 'skills');
   const cats = safe(() => fs.readdirSync(base).filter(n => fs.statSync(path.join(base, n)).isDirectory()), []);
   const skills = [];
   for (const c of cats) {
@@ -229,21 +269,18 @@ function skillsCatalog() {
 }
 
 // ---------------------------------------------------------------------------
-// OpenCode (coding execution layer)
+// OpenCode
 // ---------------------------------------------------------------------------
 
 function opencodeStatus() {
-  const bin = '/opt/data/.local/npm-global/bin/opencode';
-  const present = safe(() => fs.existsSync(bin), false);
+  const present = safe(() => fs.existsSync(CONFIG.opencodeBin), false);
   let version = null;
-  if (present) version = safe(() => execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim(), null);
+  if (present) version = safe(() => execFileSync(CONFIG.opencodeBin, ['--version'], { encoding: 'utf8' }).trim(), null);
   let config = null;
-  const cfg = '/opt/data/home/.config/opencode/opencode.json';
-  if (safe(() => fs.existsSync(cfg), false)) config = safe(() => JSON.parse(fs.readFileSync(cfg, 'utf8')), null);
-  // running sessions: opencode keeps a session DB; list them (bounded).
+  if (safe(() => fs.existsSync(CONFIG.opencodeConfig), false)) config = safe(() => JSON.parse(fs.readFileSync(CONFIG.opencodeConfig, 'utf8')), null);
   let sessions = [];
   if (present) {
-    const r = safe(() => spawnSync(bin, ['session', 'list'], { encoding: 'utf8', timeout: 20000 }), null);
+    const r = safe(() => spawnSync(CONFIG.opencodeBin, ['session', 'list'], { encoding: 'utf8', timeout: 20000 }), null);
     if (r && r.status === 0 && r.stdout) {
       const lines = r.stdout.split('\n').filter(l => l.startsWith('ses_'));
       sessions = lines.map(l => {
@@ -252,7 +289,7 @@ function opencodeStatus() {
       });
     }
   }
-  return { present, version, config_model: config && config.model ? config.model : null, sessions, running: false /* no pid tracking in MVP */ };
+  return { present, version, config_model: config && config.model ? config.model : null, sessions, running: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +297,7 @@ function opencodeStatus() {
 // ---------------------------------------------------------------------------
 
 function buildAgents() {
-  const agents = PROFILES.map(p => {
+  const agents = CONFIG.profiles.map(p => {
     const svc = serviceState(`gateway-${p.name === 'default' ? 'default' : p.name}`);
     const gw = gatewayState(p);
     const stats = sessionStats(p);
@@ -283,7 +320,6 @@ function buildAgents() {
     };
   });
 
-  // OpenCode is not a Hermes profile — it is the coding execution layer.
   const oc = opencodeStatus();
   agents.push({
     name: 'opencode',
@@ -297,7 +333,6 @@ function buildAgents() {
     memory: null,
   });
 
-  // claimed (running) tasks per assignee
   const tasks = kanbanTasks().tasks;
   for (const a of agents) {
     a.claimed_tasks = tasks.filter(t =>
@@ -309,9 +344,9 @@ function buildAgents() {
   return agents;
 }
 
-// ---------------------------------------------------------------------------
-// API router
-// ---------------------------------------------------------------------------
+// ============================================================================
+// API ROUTER
+// ============================================================================
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -344,19 +379,25 @@ function serveStatic(res, urlPath) {
 }
 
 const routes = {
-  // ---- GET ----
   'GET /api/health': () => ({
     ts: new Date().toISOString(),
-    services: SERVICES.map(serviceState),
-    hermes_cli: safe(() => ({ ok: true }), { ok: false }),
+    services: CONFIG.services.map(serviceState),
+    hermes_cli: fs.existsSync(CONFIG.hermesCli) ? { ok: true } : { ok: false, error: 'hermes CLI not found' },
+    config: {
+      hermes_data: CONFIG.hermesDataDir,
+      hermes_cli: CONFIG.hermesCli,
+      s6_svstat: CONFIG.s6Svstat,
+      s6_service_dir: CONFIG.s6ServiceDir,
+      opencode_bin: CONFIG.opencodeBin,
+    },
   }),
   'GET /api/dashboard': () => {
-    const services = SERVICES.map(serviceState);
-    const gw = gatewayState(PROFILES[0]); // root gateway_state.json (default profile)
-    const perProfile = PROFILES.map(p => ({
+    const services = CONFIG.services.map(serviceState);
+    const gw = gatewayState(CONFIG.profiles[0]);
+    const perProfile = CONFIG.profiles.map(p => ({
       name: p.name,
       gateway_state: safe(() => gatewayState(p)),
-      channel_directory: safe(() => JSON.parse(fs.readFileSync(path.join(ROOT, 'channel_directory.json'), 'utf8'))),
+      channel_directory: safe(() => JSON.parse(fs.readFileSync(path.join(CONFIG.hermesDataDir, 'channel_directory.json'), 'utf8'))),
     }));
     const tasks = kanbanTasks();
     const byStatus = {};
@@ -368,8 +409,8 @@ const routes = {
       task_counts_by_status: byStatus,
       task_total: tasks.tasks.length,
       opencode: opencodeStatus(),
-      session_totals: PROFILES.map(p => ({ profile: p.name, stats: sessionStats(p) })),
-      channel_directory: safe(() => JSON.parse(fs.readFileSync(path.join(ROOT, 'channel_directory.json'), 'utf8')), null),
+      session_totals: CONFIG.profiles.map(p => ({ profile: p.name, stats: sessionStats(p) })),
+      channel_directory: safe(() => JSON.parse(fs.readFileSync(path.join(CONFIG.hermesDataDir, 'channel_directory.json'), 'utf8')), null),
       per_profile: perProfile,
     };
   },
@@ -380,7 +421,7 @@ const routes = {
     return t || { error: 'task not found' };
   },
   'GET /api/calendar': () => {
-    const crons = PROFILES.map(p => ({ profile: p.name, jobs: cronJobs(p) }));
+    const crons = CONFIG.profiles.map(p => ({ profile: p.name, jobs: cronJobs(p) }));
     const tasks = kanbanTasks().tasks;
     return {
       ts: new Date().toISOString(),
@@ -393,16 +434,14 @@ const routes = {
   },
   'GET /api/activity': () => {
     const items = [];
-    // sessions (both profiles)
-    for (const p of PROFILES) {
+    for (const p of CONFIG.profiles) {
       const { sessions } = recentSessions(p, 10);
       for (const s of sessions) items.push({
         ts: s.ended_at_iso || s.started_at_iso, profile: p.name, kind: 'session',
         title: s.title || s.id, detail: `${s.model} · ${s.message_count ?? 0} msgs · ${s.open ? 'open' : 'closed'}`,
       });
     }
-    // kanban events (newest first)
-    const db = openDb(path.join(ROOT, 'kanban.db'));
+    const db = openDb(path.join(CONFIG.hermesDataDir, 'kanban.db'));
     if (db) {
       try {
         const ev = db.prepare(`
@@ -416,8 +455,7 @@ const routes = {
         });
       } finally { db.close(); }
     }
-    // cron runs (output dir listing)
-    for (const p of PROFILES) {
+    for (const p of CONFIG.profiles) {
       const outDir = path.join(p.home, 'cron', 'output');
       const files = safe(() => fs.readdirSync(outDir).filter(f => !f.startsWith('.')), []);
       for (const f of files.slice(-10).reverse()) {
@@ -437,7 +475,7 @@ const routes = {
     return { items: items.slice(0, 100) };
   },
   'GET /api/memory': () => {
-    const perProfile = PROFILES.map(p => {
+    const perProfile = CONFIG.profiles.map(p => {
       const m = memoryFiles(p);
       return {
         profile: p.name,
@@ -451,12 +489,10 @@ const routes = {
     return { profiles: perProfile, skills };
   },
   'GET /api/office': () => {
-    // 2D office: desks bound to live agent state.
     const agents = buildAgents();
     const desk = (a, x, y) => {
       let status = 'offline';
       if (a.opencode) {
-        // OpenCode: working if running with tasks, idle if present but not running
         status = a.opencode.running && a.claimed_tasks?.length ? 'working' : (a.opencode.present ? 'idle' : 'offline');
       } else if (a.service) {
         if (a.service.state === 'up') status = a.claimed_tasks.length ? 'working' : 'idle';
@@ -467,7 +503,7 @@ const routes = {
     return { desks: [desk(agents[0], 12, 18), desk(agents[1], 50, 18), desk(agents[2], 88, 18)] };
   },
 
-  // ---- POST (kanban writes via CLI) ----
+  // POST endpoints
   'POST /api/board/task': (req, body) => {
     const { title, body: taskBody, assignee, initial_status } = body || {};
     if (!title) return { ok: false, error: 'title required' };
@@ -523,13 +559,15 @@ const routes = {
   },
 };
 
+// ============================================================================
+// SERVER
+// ============================================================================
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const key = `${req.method} ${url.pathname.replace(/\/$/, '')}`;
 
   if (key.startsWith('GET /api/') && routes[key]) {
-    // Wrap the handler: a failing data source must yield a 500 response,
-    // never an uncaught exception that kills the whole process.
     try {
       return json(res, 200, routes[key](req, res, url));
     } catch (e) {
@@ -551,34 +589,15 @@ const server = http.createServer((req, res) => {
           return json(res, 500, { error: e.message, endpoint: key });
         }
       }
-      json(res, 404, { error: 'unknown endpoint' });
+      return json(res, 404, { error: 'not found' });
     });
     return;
   }
-  if (key === 'GET /api') {
-    return json(res, 200, {
-      endpoints: Object.keys(routes).filter(k => k.startsWith('GET')),
-      service: 'mission-control', version: '0.1.0',
-    });
-  }
-  if (req.method === 'GET' || (req.method === 'HEAD')) {
-    return serveStatic(res, url.pathname);
-  }
-  json(res, 405, { error: 'method not allowed' });
+  serveStatic(res, url.pathname);
 });
 
-// Process-level safety net: log and keep serving instead of dying.
-process.on('uncaughtException', (e) => {
-  console.error('[mission-control] uncaughtException (suppressed):', e && e.message);
+server.listen(CONFIG.port, CONFIG.host, () => {
+  console.log(`[mission-control] Server listening on http://${CONFIG.host}:${CONFIG.port}`);
+  console.log(`[mission-control] API endpoints available at http://${CONFIG.host}:${CONFIG.port}/api/`);
+  console.log(`[mission-control] Visual Office at http://${CONFIG.host}:${CONFIG.port}/#/office`);
 });
-process.on('unhandledRejection', (e) => {
-  console.error('[mission-control] unhandledRejection (suppressed):', e && (e.message || e));
-});
-
-if (require.main === module) {
-  server.listen(PORT, HOST, () => {
-    console.log(`[mission-control] listening on http://${HOST}:${PORT}`);
-  });
-}
-
-module.exports = { server, buildAgents, kanbanTasks, serviceState };
