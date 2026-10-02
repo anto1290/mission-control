@@ -367,69 +367,6 @@ async function renderMemory(el) {
 }
 
 /* ============================ PIXEL ART OFFICE ============================ */
-async function renderPixelOffice(el) {
-  el.innerHTML = `
-    <div class="pixel-office-wrap">
-      <div class="pixel-room" id="pixel-room">
-        <div style="padding:40px;text-align:center;color:var(--muted)">Loading office...</div>
-      </div>
-      <div class="pixel-sidebar">
-        <div class="sidebar-panel">
-          <h4>Team Members</h4>
-          <div class="user-list" id="user-list"></div>
-        </div>
-        <div class="sidebar-panel">
-          <h4>Channels</h4>
-          <div class="channel-list" id="channel-list"></div>
-        </div>
-        <div class="sidebar-panel">
-          <h4>Live Activity</h4>
-          <div class="mini-feed" id="mini-feed"></div>
-        </div>
-      </div>
-    </div>
-    <div class="agent-popup" id="agent-popup">
-      <div class="popup-header">
-        <div class="popup-avatar" id="popup-avatar"></div>
-        <div>
-          <div class="popup-name" id="popup-name"></div>
-          <div class="popup-role" id="popup-role"></div>
-        </div>
-      </div>
-      <div class="popup-section">
-        <div class="popup-label">Status</div>
-        <div class="popup-value" id="popup-status"></div>
-      </div>
-      <div class="popup-section">
-        <div class="popup-label">Current Task</div>
-        <div class="popup-value" id="popup-task"></div>
-      </div>
-      <div class="popup-section">
-        <div class="popup-label">Model</div>
-        <div class="popup-value" id="popup-model"></div>
-      </div>
-    </div>`;
-  
-  try {
-    const [agents, dashboard, activity] = await Promise.all([
-      api('/api/agents'),
-      api('/api/dashboard'),
-      api('/api/activity'),
-    ]);
-    
-    window._pixelAgents = processAgentData(agents.agents);
-    window._pixelDashboard = dashboard;
-    window._pixelActivity = activity;
-    
-    renderPixelRoom('workspace');
-    updateStatusSummary();
-    updateUserList();
-    updateChannelList();
-    updateMiniFeed();
-  } catch (e) {
-    el.innerHTML = `<div class="card"><h3>Failed to load office</h3><div class="notice">${esc(e.message)}</div></div>`;
-  }
-}
 
 function processAgentData(rawAgents) {
   return rawAgents.map(a => {

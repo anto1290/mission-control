@@ -455,8 +455,10 @@ const routes = {
     const agents = buildAgents();
     const desk = (a, x, y) => {
       let status = 'offline';
-      if (a.opencode) status = a.opencode.present ? 'idle' : 'offline';
-      else if (a.service) {
+      if (a.opencode) {
+        // OpenCode: working if running with tasks, idle if present but not running
+        status = a.opencode.running && a.claimed_tasks?.length ? 'working' : (a.opencode.present ? 'idle' : 'offline');
+      } else if (a.service) {
         if (a.service.state === 'up') status = a.claimed_tasks.length ? 'working' : 'idle';
         else status = 'offline';
       }
