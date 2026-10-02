@@ -25,6 +25,14 @@ app.use('/api', (_request, response, next) => {
 const startedAt = new Date().toISOString()
 app.get('/api/health', (_request, response) => { response.json({ ok: true, apiVersion: API_VERSION, startedAt }) })
 
+// OpenAPI spec
+app.get('/api/openapi.json', (_request, response) => {
+  const fs = require('fs')
+  const path = require('path')
+  const spec = fs.readFileSync(path.join(__dirname, 'openapi.json'), 'utf8')
+  response.json(JSON.parse(spec))
+})
+
 // Optional access code (off by default): locks every other /api route until it is entered.
 installAccess(app)
 

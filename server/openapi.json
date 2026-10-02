@@ -1,0 +1,644 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Mission Control API",
+    "description": "Real-time monitoring API for Hermes AI Agents",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001",
+      "description": "Local Raum Server"
+    },
+    {
+      "url": "https://iyxfrf42-hermes.adacode.ai",
+      "description": "Remote Hermes"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "apiVersion": { "type": "integer" },
+                    "startedAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runtime": {
+      "get": {
+        "summary": "Get agent runtime status",
+        "description": "Returns profile list with gateway status and model info",
+        "responses": {
+          "200": {
+            "description": "Runtime snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard": {
+      "get": {
+        "summary": "Get dashboard summary",
+        "description": "Returns KPI data: tasks, calendar, activity, knowledge, channels, office",
+        "parameters": [
+          {
+            "name": "fresh",
+            "in": "query",
+            "schema": { "type": "boolean" },
+            "description": "Bypass cache for fresh data"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/office": {
+      "get": {
+        "summary": "Get office stations",
+        "description": "Returns 3D office station data with agent states",
+        "responses": {
+          "200": {
+            "description": "Office snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "summary": "Get task board",
+        "description": "Returns kanban board tasks",
+        "responses": {
+          "200": {
+            "description": "Task board snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBoardSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
+      "get": {
+        "summary": "Get task detail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "board",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Task detail" },
+          "404": { "description": "Task not found" }
+        }
+      }
+    },
+    "/api/calendar": {
+      "get": {
+        "summary": "Get cron jobs",
+        "description": "Returns scheduled jobs list",
+        "responses": {
+          "200": {
+            "description": "Calendar snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/activity": {
+      "get": {
+        "summary": "Get session history",
+        "description": "Returns recent chat sessions",
+        "responses": {
+          "200": {
+            "description": "Activity snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivitySnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge": {
+      "get": {
+        "summary": "Get skills list",
+        "description": "Returns available skills by category",
+        "responses": {
+          "200": {
+            "description": "Knowledge snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels": {
+      "get": {
+        "summary": "Get channel status",
+        "description": "Returns connected platforms (Telegram, WhatsApp, etc.)",
+        "responses": {
+          "200": {
+            "description": "Channels snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders": {
+      "get": {
+        "summary": "Get agent folders",
+        "description": "Returns folder structure for all agents",
+        "responses": {
+          "200": {
+            "description": "Folders list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AgentFolder" }
+                    },
+                    "fetchedAt": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/folders/{profile}/list": {
+      "get": {
+        "summary": "List folder contents",
+        "parameters": [
+          {
+            "name": "profile",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Folder listing" },
+          "404": { "description": "Agent not found" }
+        }
+      }
+    },
+    "/api/folders/{profile}/file": {
+      "get": {
+        "summary": "Read agent file",
+        "parameters": [
+          {
+            "name": "profile",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "File content" },
+          "404": { "description": "File not found" }
+        }
+      }
+    },
+    "/api/memory": {
+      "get": {
+        "summary": "Get agent memory",
+        "description": "Returns MEMORY.md, USER.md, context files for all agents",
+        "responses": {
+          "200": {
+            "description": "Memory snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "summary": "Get command logs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Command logs" }
+        }
+      }
+    },
+    "/api/command-log": {
+      "get": {
+        "summary": "Get command health",
+        "responses": {
+          "200": { "description": "Command statistics" }
+        }
+      }
+    },
+    "/api/usage": {
+      "get": {
+        "summary": "Get token usage insights",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": { "type": "integer", "default": 7 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage insights",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RuntimeSnapshot": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string", "enum": ["available", "unavailable"] },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "model": { "type": "string" },
+                    "gateway": { "type": "string", "enum": ["Running", "Stopped", "Unknown"] }
+                  }
+                }
+              }
+            }
+          },
+          "openCode": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "data": { "type": "string" }
+            }
+          },
+          "fetchedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DashboardSnapshot": {
+        "type": "object",
+        "properties": {
+          "runtime": { "$ref": "#/components/schemas/RuntimeSnapshot" },
+          "tasks": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "total": { "type": "integer" },
+              "byStatus": { "type": "object" },
+              "assigned": { "type": "integer" }
+            }
+          },
+          "calendar": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "total": { "type": "integer" },
+              "active": { "type": "integer" }
+            }
+          },
+          "activity": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "total": { "type": "integer" },
+              "latest": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "preview": { "type": "string" },
+                  "lastActive": { "type": "string" }
+                }
+              }
+            }
+          },
+          "knowledge": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "total": { "type": "integer" },
+              "byCategory": { "type": "object" }
+            }
+          },
+          "channels": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "total": { "type": "integer" },
+              "connected": { "type": "integer" }
+            }
+          },
+          "office": {
+            "type": "object",
+            "properties": {
+              "declared": { "type": "integer" },
+              "active": { "type": "integer" },
+              "idle": { "type": "integer" },
+              "offline": { "type": "integer" }
+            }
+          },
+          "commands": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "failed": { "type": "integer" },
+              "averageMs": { "type": "integer" }
+            }
+          },
+          "fetchedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "OfficeSnapshot": {
+        "type": "object",
+        "properties": {
+          "stations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "role": { "type": "string" },
+                "room": { "type": "string" },
+                "seat": { "type": "integer" },
+                "state": { "type": "string" },
+                "activity": { "type": "string" }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "declared": { "type": "integer" },
+              "active": { "type": "integer" },
+              "idle": { "type": "integer" },
+              "offline": { "type": "integer" }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "TaskBoardSnapshot": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": { "type": "string" },
+                    "status": { "type": "string" },
+                    "id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "CalendarSnapshot": {
+        "type": "object",
+        "properties": {
+          "jobs": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "schedule": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "ActivitySnapshot": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": { "type": "string" },
+                    "preview": { "type": "string" },
+                    "lastActive": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "KnowledgeSnapshot": {
+        "type": "object",
+        "properties": {
+          "skills": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "category": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "ChannelSnapshot": {
+        "type": "object",
+        "properties": {
+          "channels": {
+            "type": "object",
+            "properties": {
+              "availability": { "type": "string" },
+              "data": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "AgentFolder": {
+        "type": "object",
+        "properties": {
+          "profile": { "type": "string" },
+          "label": { "type": "string" },
+          "available": { "type": "boolean" },
+          "path": { "type": "string" }
+        }
+      },
+      "MemorySnapshot": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "profile": { "type": "string" },
+                "label": { "type": "string" },
+                "memory": {
+                  "type": "object",
+                  "properties": {
+                    "content": { "type": "string" },
+                    "used": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "fetchedAt": { "type": "string" }
+        }
+      },
+      "UsageSnapshot": {
+        "type": "object",
+        "properties": {
+          "days": { "type": "integer" },
+          "sessions": { "type": "integer" },
+          "messages": { "type": "integer" },
+          "tokens": { "type": "integer" },
+          "costUsd": { "type": "number" },
+          "fetchedAt": { "type": "string" }
+        }
+      }
+    }
+  }
+}
