@@ -2,27 +2,72 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 
-export interface Agent {
+export interface Profile {
   name: string;
-  label: string;
-  role: string;
-  status: 'working' | 'idle' | 'offline';
-  task?: string;
-  model?: string;
-  service?: { state: string; pid?: number; seconds?: number };
-  opencode?: { present: boolean; running: boolean };
+  model: string;
+  gateway: 'Running' | 'Stopped' | 'Unknown';
+}
+
+export interface RuntimeData {
+  profiles: {
+    availability: 'available' | 'unavailable';
+    data: Profile[];
+    error?: { code: string; message: string };
+  };
+  openCode: {
+    availability: 'available' | 'unavailable';
+    data: string;
+    error?: { code: string; message: string };
+  };
+  fetchedAt: string;
 }
 
 export interface DashboardData {
-  services: Array<{ name: string; state: string }>;
-  platforms: Array<{ platform: string; state: string }>;
-  task_counts_by_status: Record<string, number>;
-  task_total: number;
-  opencode: { present: boolean; version?: string };
+  runtime: RuntimeData;
+  tasks: {
+    availability: string;
+    total: number;
+    byStatus: Record<string, number>;
+    assigned: number;
+  };
+  calendar: {
+    availability: string;
+    total: number;
+    active: number;
+    paused: number;
+  };
+  activity: {
+    availability: string;
+    total: number;
+    latest?: { title: string; preview: string; lastActive: string; id: string };
+  };
+  knowledge: {
+    availability: string;
+    total: number;
+    byCategory: Record<string, number>;
+  };
+  channels: {
+    availability: string;
+    total: number;
+    connected: number;
+  };
+  office: {
+    declared: number;
+    active: number;
+    idle: number;
+    offline: number;
+    unknown: number;
+  };
+  commands: {
+    total: number;
+    failed: number;
+    averageMs: number;
+  };
+  fetchedAt: string;
 }
 
 interface ApiContextType {
-  agents: Agent[];
+  runtime: RuntimeData | null;
   dashboard: DashboardData | null;
   loading: boolean;
   error: string | null;
@@ -32,7 +77,7 @@ interface ApiContextType {
 const ApiContext = createContext<ApiContextType | null>(null);
 
 export function ApiProvider({ children }: { children: React.ReactNode }) {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [runtime, setRuntime] = useState<RuntimeData | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,19 +87,19 @@ export function ApiProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       
-      const [agentsRes, dashboardRes] = await Promise.all([
-        fetch('/api/agents'),
+      const [runtimeRes, dashboardRes] = await Promise.all([
+        fetch('/api/runtime'),
         fetch('/api/dashboard'),
       ]);
       
-      if (!agentsRes.ok || !dashboardRes.ok) {
+      if (!runtimeRes.ok || !dashboardRes.ok) {
         throw new Error('Failed to fetch data');
       }
       
-      const agentsData = await agentsRes.json();
+      const runtimeData = await runtimeRes.json();
       const dashboardData = await dashboardRes.json();
       
-      setAgents(agentsData.agents || []);
+      setRuntime(runtimeData);
       setDashboard(dashboardData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -70,7 +115,7 @@ export function ApiProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ApiContext.Provider value={{ agents, dashboard, loading, error, refresh: fetchAll }}>
+    <ApiContext.Provider value={{ runtime, dashboard, loading, error, refresh: fetchAll }}>
       {children}
     </ApiContext.Provider>
   );

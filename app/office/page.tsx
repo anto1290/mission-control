@@ -5,48 +5,53 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useApi } from '@/contexts/ApiContext';
 
-interface Agent {
+interface Station {
+  id: string;
   name: string;
-  label: string;
-  status: 'working' | 'idle' | 'offline';
-  task?: string;
-  color: string;
+  role: string;
+  room: 'Workspace' | 'Lounge';
+  roomPosition: string;
+  seat: number;
+  state: 'Idle' | 'Working' | 'Reviewing' | 'Collaborating' | 'Offline' | 'Unknown';
+  currentTask: string;
+  recentActivity: string;
+  activity: string;
+  provenance: string;
+  freshness: string;
 }
 
 export default function OfficePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { agents } = useApi();
+  const { dashboard, runtime, loading } = useApi();
   const [rotation, setRotation] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedStation, setSelectedStation] = useState<Station | null>(null);
 
-  const processAgents = useCallback((rawAgents: any[]): Agent[] => {
-    return rawAgents.map(a => {
-      let status: 'working' | 'idle' | 'offline' = 'offline';
-      let task = undefined;
-      
-      if (a.opencode) {
-        status = a.opencode.present ? 'idle' : 'offline';
-        task = a.claimed_tasks?.[0]?.title;
-      } else if (a.service) {
-        if (a.service.state === 'up') {
-          status = a.claimed_tasks?.length ? 'working' : 'idle';
-          task = a.claimed_tasks?.[0]?.title;
-        }
-      }
-      
-      return {
-        name: a.name,
-        label: a.label,
-        status,
-        task,
-        color: a.name === 'default' ? '#5b9bd5' : a.name === 'leadenginer' ? '#4fb986' : '#9f7aea',
-      };
-    });
+  // Get office stations from dashboard or fetch separately
+  const [stations, setStations] = useState<Station[]>([]);
+
+  // Fetch stations
+  useEffect(() => {
+    fetch('/api/office')
+      .then(r => r.json())
+      .then(data => setStations(data.stations || []))
+      .catch(console.error);
   }, []);
+
+  // Fetch stations if not available
+  useEffect(() => {
+    if (stations.length === 0) {
+      fetch('http://localhost:3001/api/office')
+        .then(r => r.json())
+        .then(data => {
+          // This would need a separate state, but for now we use dashboard
+        })
+        .catch(console.error);
+    }
+  }, [stations.length]);
 
   const drawOffice = useCallback(() => {
     const canvas = canvasRef.current;
@@ -77,19 +82,16 @@ export default function OfficePage() {
     // Draw isometric floor
     drawIsometricFloor(ctx, 400, 300);
     
-    // Draw desks and agents
-    const processedAgents = processAgents(agents);
+    // Draw desks and agents from stations
     const cols = 4;
-    const rows = Math.ceil(processedAgents.length / cols);
-    
-    processedAgents.forEach((agent, index) => {
+    stations.forEach((station, index) => {
       const col = index % cols;
       const row = Math.floor(index / cols);
       const x = -120 + col * 80;
       const y = -60 + row * 70;
       
       drawDesk(ctx, x, y);
-      drawAgent(ctx, agent, x, y + 30);
+      drawAgent(ctx, station, x, y + 30);
     });
     
     // Draw plants
@@ -99,7 +101,7 @@ export default function OfficePage() {
     drawPlant(ctx, 180, 120);
     
     ctx.restore();
-  }, [agents, rotation, zoom, offset, processAgents]);
+  }, [stations, rotation, zoom, offset]);
 
   const drawIsometricFloor = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     // Floor base
@@ -144,7 +146,7 @@ export default function OfficePage() {
     ctx.fillRect(x - 8, y - 33, 16, 16);
   };
 
-  const drawAgent = (ctx: CanvasRenderingContext2D, agent: Agent, x: number, y: number) => {
+  const drawAgent = (ctx: CanvasRenderingContext2D, station: Station, x: number, y: number) => {
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
@@ -152,7 +154,8 @@ export default function OfficePage() {
     ctx.fill();
     
     // Body
-    ctx.fillStyle = agent.color;
+    const color = station.id === 'default' ? '#5b9bd5' : station.id === 'leadenginer' ? '#4fb986' : '#9f7aea';
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.roundRect(x - 10, y - 25, 20, 35, 4);
     ctx.fill();
@@ -164,21 +167,28 @@ export default function OfficePage() {
     ctx.fill();
     
     // Status indicator
-    const statusColor = agent.status === 'working' ? '#4fb986' : 
-                       agent.status === 'idle' ? '#eab474' : '#5c655d';
+    const statusColor = station.state === 'Working' || station.state === 'Collaborating' || station.state === 'Reviewing'
+      ? '#4fb986' 
+      : station.state === 'Idle' ? '#eab474' : '#5c655d';
     ctx.fillStyle = statusColor;
     ctx.beginPath();
     ctx.arc(x + 10, y - 40, 5, 0, Math.PI * 2);
     ctx.fill();
     
     // Pulse animation for working
-    if (agent.status === 'working') {
+    if (station.state === 'Working' || station.state === 'Collaborating') {
       ctx.strokeStyle = 'rgba(79, 185, 134, 0.3)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(x + 10, y - 40, 10, 0, Math.PI * 2);
       ctx.stroke();
     }
+    
+    // Name label
+    ctx.fillStyle = '#e5e1d8';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(station.name, x, y + 50);
   };
 
   const drawPlant = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
@@ -259,13 +269,12 @@ export default function OfficePage() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    const processedAgents = processAgents(agents);
-    let found: Agent | null = null;
+    const cols = 4;
+    let found: Station | null = null;
     
-    processedAgents.forEach((agent, index) => {
-      const cols = 4;
-      const row = Math.floor(index / cols);
+    stations.forEach((station, index) => {
       const col = index % cols;
+      const row = Math.floor(index / cols);
       const agentX = -120 + col * 80 + offset.x;
       const agentY = -60 + row * 70 + offset.y;
       
@@ -273,11 +282,11 @@ export default function OfficePage() {
       const dy = (y - canvas.height / 2) / zoom - agentY;
       
       if (Math.abs(dx) < 25 && Math.abs(dy) < 35) {
-        found = agent;
+        found = station;
       }
     });
     
-    setSelectedAgent(found);
+    setSelectedStation(found);
   };
 
   return (
@@ -285,15 +294,15 @@ export default function OfficePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">3D Office</h1>
-          <p className="text-dark-400 mt-1">Interactive isometric view of your AI team</p>
+          <p className="text-slate-400 mt-1">Interactive isometric view of your AI team</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setRotation(r => r - 15)} className="px-4 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-white text-sm">↺ Rotate</button>
-          <button onClick={() => { setRotation(0); setZoom(1); setOffset({ x: 0, y: 0 }); }} className="px-4 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-white text-sm">Reset</button>
+          <button onClick={() => setRotation(r => r - 15)} className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm">↺ Rotate</button>
+          <button onClick={() => { setRotation(0); setZoom(1); setOffset({ x: 0, y: 0 }); }} className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm">Reset</button>
         </div>
       </div>
 
-      <div className="glass-card rounded-xl overflow-hidden" style={{ height: '600px' }}>
+      <div className="rounded-xl overflow-hidden border border-slate-700" style={{ height: '600px' }}>
         <canvas
           ref={canvasRef}
           className="w-full h-full cursor-grab active:cursor-grabbing"
@@ -307,36 +316,71 @@ export default function OfficePage() {
         
         {/* Info overlay */}
         <div className="absolute top-4 left-4 flex gap-2">
-          <span className="px-3 py-1 rounded-full bg-dark-800/80 backdrop-blur text-dark-300 text-xs">
+          <span className="px-3 py-1 rounded-full bg-slate-800/80 backdrop-blur text-slate-300 text-xs">
             Drag to pan
           </span>
-          <span className="px-3 py-1 rounded-full bg-dark-800/80 backdrop-blur text-dark-300 text-xs">
+          <span className="px-3 py-1 rounded-full bg-slate-800/80 backdrop-blur text-slate-300 text-xs">
             Scroll to zoom
           </span>
         </div>
         
-        {/* Agent tooltip */}
-        {selectedAgent && (
-          <div className="absolute top-4 right-4 glass-card rounded-lg p-4 max-w-xs">
+        {/* Station tooltip */}
+        {selectedStation && (
+          <div className="absolute top-4 right-4 bg-slate-800/90 backdrop-blur rounded-lg p-4 max-w-xs border border-slate-700">
             <div className="flex items-center gap-3">
               <div 
                 className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                style={{ backgroundColor: selectedAgent.color }}
+                style={{ backgroundColor: selectedStation.id === 'default' ? '#5b9bd5' : selectedStation.id === 'leadenginer' ? '#4fb986' : '#9f7aea' }}
               >
-                {selectedAgent.label.charAt(0)}
+                {selectedStation.name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <div className="font-semibold text-white">{selectedAgent.label}</div>
-                <div className="text-xs text-dark-400">{selectedAgent.status}</div>
+                <div className="font-semibold text-white">{selectedStation.name}</div>
+                <div className="text-xs text-slate-400">{selectedStation.state}</div>
               </div>
             </div>
-            {selectedAgent.task && (
-              <div className="mt-2 pt-2 border-t border-dark-700 text-sm text-dark-300">
-                {selectedAgent.task}
+            {selectedStation.activity && (
+              <div className="mt-2 pt-2 border-t border-slate-700 text-sm text-slate-300">
+                {selectedStation.activity}
               </div>
             )}
           </div>
         )}
+      </div>
+
+      {/* Station info cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {stations.map((station) => (
+          <div key={station.id} className="card cursor-pointer hover:border-emerald-500/50 transition-colors" onClick={() => setSelectedStation(station)}>
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                style={{ backgroundColor: station.id === 'default' ? '#5b9bd5' : station.id === 'leadenginer' ? '#4fb986' : '#9f7aea' }}
+              >
+                {station.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-white font-medium">{station.name}</p>
+                <p className="text-slate-400 text-sm">{station.role}</p>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                station.state === 'Working' || station.state === 'Collaborating'
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : station.state === 'Idle'
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-slate-500/20 text-slate-400'
+              }`}>
+                {station.state}
+              </span>
+              <span className="text-xs text-slate-500">{station.room}</span>
+            </div>
+            {station.activity && (
+              <p className="mt-2 text-xs text-slate-400">{station.activity}</p>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

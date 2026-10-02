@@ -5,17 +5,26 @@ export const dynamic = 'force-dynamic';
 import { useApi } from '@/contexts/ApiContext';
 
 export default function HomePage() {
-  const { agents, dashboard, loading } = useApi();
+  const { runtime, dashboard, loading } = useApi();
+
+  const profiles = runtime?.profiles?.data || [];
+  const activeProfiles = profiles.filter(p => p.gateway === 'Running').length;
+  
+  const taskTotal = dashboard?.tasks.total || 0;
+  const calendarTotal = dashboard?.calendar.total || 0;
+  const activityTotal = dashboard?.activity.total || 0;
+  const officeActive = dashboard?.office.active || 0;
+  const channelsConnected = dashboard?.channels.connected || 0;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-          <p className="text-dark-400 mt-1">Real-time overview of your AI team</p>
+          <p className="text-slate-400 mt-1">Real-time overview of your AI team</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1 rounded-full bg-primary-500/20 text-primary-400 text-sm font-medium">
+          <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium">
             LIVE
           </span>
         </div>
@@ -23,178 +32,124 @@ export default function HomePage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Services Up"
-          value={dashboard?.services.filter(s => s.state === 'up').length || 0}
-          total={dashboard?.services.length || 0}
-          icon="⚡"
-          color="green"
-        />
-        <StatCard
+        <KpiCard
           label="Active Agents"
-          value={agents.filter(a => a.status === 'working').length}
-          total={agents.length}
+          value={activeProfiles}
+          total={profiles.length}
           icon="🤖"
           color="blue"
         />
-        <StatCard
-          label="Open Tasks"
-          value={Object.values(dashboard?.task_counts_by_status || {}).reduce((a, b) => a + b, 0)}
+        <KpiCard
+          label="Tasks"
+          value={taskTotal}
           icon="📋"
           color="amber"
         />
-        <StatCard
-          label="Platforms"
-          value={dashboard?.platforms.filter(p => p.state === 'connected').length || 0}
-          total={dashboard?.platforms.length || 0}
-          icon="🔌"
+        <KpiCard
+          label="Cron Jobs"
+          value={calendarTotal}
+          icon="⏰"
           color="purple"
+        />
+        <KpiCard
+          label="Channels"
+          value={channelsConnected}
+          icon="🔌"
+          color="green"
         />
       </div>
 
-      {/* Agents & Services */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AgentsPanel agents={agents} loading={loading} />
-        <ServicesPanel services={dashboard?.services || []} platforms={dashboard?.platforms || []} loading={loading} />
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, total, icon, color }: any) {
-  const colors: Record<string, string> = {
-    green: 'from-green-500/20 to-green-600/5 border-green-500/30',
-    blue: 'from-blue-500/20 to-blue-600/5 border-blue-500/30',
-    purple: 'from-purple-500/20 to-purple-600/5 border-purple-500/30',
-    amber: 'from-amber-500/20 to-amber-600/5 border-amber-500/30',
-  };
-
-  return (
-    <div className={`p-4 rounded-xl border bg-gradient-to-br ${colors[color] || colors.blue}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-2xl">{icon}</span>
-        {total !== undefined && (
-          <span className="text-dark-400 text-sm">{value}/{total}</span>
-        )}
-      </div>
-      <div className="mt-3">
-        <div className="text-2xl font-bold text-white">{value}</div>
-        <div className="text-dark-400 text-sm">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function AgentsPanel({ agents, loading }: any) {
-  if (loading) {
-    return (
-      <div className="glass-card rounded-xl p-6">
-        <div className="animate-pulse space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-dark-700"></div>
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-dark-700 rounded w-1/3"></div>
-                <div className="h-3 bg-dark-800 rounded w-1/2"></div>
+      {/* Agent Status */}
+      <div className="card">
+        <h2 className="text-lg font-semibold text-white mb-4">Agent Status</h2>
+        <div className="space-y-3">
+          {profiles.map((profile) => (
+            <div key={profile.name} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${
+                  profile.gateway === 'Running' ? 'bg-emerald-500' : 'bg-slate-500'
+                }`} />
+                <div>
+                  <p className="text-white font-medium">{profile.name}</p>
+                  <p className="text-slate-400 text-sm">{profile.model}</p>
+                </div>
               </div>
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                profile.gateway === 'Running' 
+                  ? 'bg-emerald-500/20 text-emerald-400' 
+                  : 'bg-slate-500/20 text-slate-400'
+              }`}>
+                {profile.gateway}
+              </span>
             </div>
           ))}
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="glass-card rounded-xl p-6">
-      <h2 className="text-lg font-semibold text-white mb-4">AI Agents</h2>
-      <div className="space-y-3">
-        {agents.map((agent: any) => (
-          <AgentCard key={agent.name} agent={agent} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AgentCard({ agent }: { agent: any }) {
-  const statusColors = {
-    working: 'bg-green-500',
-    idle: 'bg-amber-500',
-    offline: 'bg-dark-500',
-  };
-
-  const colors: Record<string, string> = {
-    default: 'from-blue-500 to-blue-600',
-    leadenginer: 'from-green-500 to-green-600',
-    opencode: 'from-purple-500 to-purple-600',
-  };
-
-  return (
-    <div className="flex items-center gap-4 p-3 rounded-lg bg-dark-800/50 hover:bg-dark-800 transition-colors">
-      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${colors[agent.name] || 'from-gray-500 to-gray-600'} flex items-center justify-center text-white font-bold text-sm`}>
-        {agent.label.charAt(0)}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-white">{agent.label}</span>
-          <span className={`w-2 h-2 rounded-full ${statusColors[agent.status]} ${agent.status === 'working' ? 'animate-pulse' : ''}`}></span>
+      {/* Office Summary */}
+      <div className="card">
+        <h2 className="text-lg font-semibold text-white mb-4">Office Summary</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center p-4 rounded-lg bg-slate-800/50">
+            <p className="text-3xl font-bold text-emerald-400">{dashboard?.office.active}</p>
+            <p className="text-slate-400 text-sm">Active</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-slate-800/50">
+            <p className="text-3xl font-bold text-amber-400">{dashboard?.office.idle}</p>
+            <p className="text-slate-400 text-sm">Idle</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-slate-800/50">
+            <p className="text-3xl font-bold text-slate-400">{dashboard?.office.offline}</p>
+            <p className="text-slate-400 text-sm">Offline</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-slate-800/50">
+            <p className="text-3xl font-bold text-blue-400">{dashboard?.office.declared}</p>
+            <p className="text-slate-400 text-sm">Total</p>
+          </div>
         </div>
-        <p className="text-dark-400 text-sm truncate">{agent.role?.split('—')[0]?.trim()}</p>
       </div>
-      {agent.task && (
-        <div className="text-right hidden sm:block">
-          <p className="text-dark-300 text-sm max-w-[200px] truncate">{agent.task}</p>
+
+      {/* Recent Activity */}
+      {dashboard?.activity.latest && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-white mb-4">Recent Activity</h2>
+          <div className="p-4 rounded-lg bg-slate-800/50">
+            <p className="text-white font-medium">{dashboard.activity.latest.title}</p>
+            <p className="text-slate-400 text-sm mt-1">{dashboard.activity.latest.preview}</p>
+            <p className="text-slate-500 text-xs mt-2">{dashboard.activity.latest.lastActive}</p>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function ServicesPanel({ services, platforms, loading }: any) {
-  if (loading) {
-    return (
-      <div className="glass-card rounded-xl p-6">
-        <div className="animate-pulse space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-4 bg-dark-700 rounded w-full"></div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+function KpiCard({ label, value, total, icon, color }: {
+  label: string;
+  value: number;
+  total?: number;
+  icon: string;
+  color: 'blue' | 'green' | 'amber' | 'purple' | 'red';
+}) {
+  const colors = {
+    blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/30',
+    green: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30',
+    amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/30',
+    purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/30',
+    red: 'from-red-500/20 to-red-600/10 border-red-500/30',
+  };
 
   return (
-    <div className="glass-card rounded-xl p-6">
-      <h2 className="text-lg font-semibold text-white mb-4">Services & Platforms</h2>
-      
-      <div className="space-y-4">
+    <div className={`p-4 rounded-xl bg-gradient-to-br ${colors[color]} border`}>
+      <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-dark-400 mb-2">Hermes Services</h3>
-          <div className="space-y-2">
-            {services.map((svc: any) => (
-              <div key={svc.name} className="flex items-center justify-between p-2 rounded bg-dark-800/50">
-                <span className="text-dark-300 text-sm font-mono">{svc.name}</span>
-                <span className={`px-2 py-0.5 rounded text-xs ${svc.state === 'up' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {svc.state}
-                </span>
-              </div>
-            ))}
-          </div>
+          <p className="text-slate-400 text-sm">{label}</p>
+          <p className="text-3xl font-bold text-white mt-1">
+            {value}
+            {total !== undefined && <span className="text-lg text-slate-500">/{total}</span>}
+          </p>
         </div>
-        
-        <div>
-          <h3 className="text-sm font-medium text-dark-400 mb-2">Platforms</h3>
-          <div className="space-y-2">
-            {platforms.map((p: any) => (
-              <div key={p.platform} className="flex items-center justify-between p-2 rounded bg-dark-800/50">
-                <span className="text-dark-300 text-sm">{p.platform}</span>
-                <span className={`px-2 py-0.5 rounded text-xs ${p.state === 'connected' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                  {p.state}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <span className="text-3xl">{icon}</span>
       </div>
     </div>
   );
