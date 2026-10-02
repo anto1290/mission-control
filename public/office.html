@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Office — Mission Control</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/office-style.css">
+<style>
+/* Pixel art color palette */
+:root {
+  --pixel-floor: #8b7355;
+  --pixel-floor-dark: #6b5540;
+  --pixel-wall: #4a5568;
+  --pixel-wall-light: #5a6578;
+  --pixel-window: #87ceeb;
+  --pixel-window-frame: #4a5568;
+  --pixel-door: #6b4423;
+  --pixel-door-frame: #4a3728;
+  --pixel-desk: #8b6914;
+  --pixel-desk-top: #a07818;
+  --pixel-chair: #4a5568;
+  --pixel-monitor: #1a202c;
+  --pixel-monitor-screen: #2d3748;
+  --pixel-plant: #48bb78;
+  --pixel-pot: #8b6914;
+  --pixel-cooler: #63b3ed;
+  --pixel-shelf: #6b5540;
+  --pixel-whiteboard: #e2e8f0;
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◈</span>
+    <div>
+      <h1>Visual Office</h1>
+      <p class="sub">Hermes AI Team — Pixel Art Dashboard</p>
+    </div>
+  </div>
+  <nav id="nav">
+    <button data-view="dashboard">Dashboard</button>
+    <button data-view="agents">Agents</button>
+    <button data-view="board">Task Board</button>
+    <button data-view="calendar">Calendar</button>
+    <button data-view="activity">Activity</button>
+    <button data-view="memory">Memory</button>
+    <button data-view="office" class="active">Office</button>
+  </nav>
+  <div class="topbar-right">
+    <span id="updated"></span>
+    <button id="refresh" title="Refresh now">⟳</button>
+  </div>
+</header>
+
+<main>
+  <section id="view-office" class="view">
+    <div class="room-header">
+      <h2 class="room-title">Visual Office</h2>
+      <span class="room-subtitle">Real-time agent states from Hermes data sources</span>
+    </div>
+    
+    <!-- Status Summary -->
+    <div class="status-summary" id="status-summary">
+      <div class="status-item">
+        <span class="status-dot working"></span>
+        <span>Working: <b id="count-working">0</b></span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot idle"></span>
+        <span>Idle: <b id="count-idle">0</b></span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot offline"></span>
+        <span>Offline: <b id="count-offline">0</b></span>
+      </div>
+    </div>
+    
+    <!-- Room Navigation -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button id="btn-workspace" class="primary" onclick="switchRoom('workspace')">🖥️ Workspace</button>
+      <button id="btn-lounge" class="ghost" onclick="switchRoom('lounge')">🛋️ Lounge</button>
+    </div>
+    
+    <!-- Main Content Area -->
+    <div class="pixel-office-wrap">
+      <!-- Pixel Art Room -->
+      <div class="pixel-room" id="pixel-room">
+        <!-- SVG rendered by JS -->
+      </div>
+      
+      <!-- Sidebar -->
+      <div class="pixel-sidebar">
+        <!-- Agent List -->
+        <div class="sidebar-panel">
+          <h4>Team Members</h4>
+          <div class="user-list" id="user-list"></div>
+        </div>
+        
+        <!-- Channel Status -->
+        <div class="sidebar-panel">
+          <h4>Channels</h4>
+          <div class="channel-list" id="channel-list"></div>
+        </div>
+        
+        <!-- Live Activity -->
+        <div class="sidebar-panel">
+          <h4>Live Activity</h4>
+          <div class="mini-feed" id="mini-feed"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Hidden sections for navigation -->
+  <section id="view-dashboard" class="view hidden"></section>
+  <section id="view-agents" class="view hidden"></section>
+  <section id="view-board" class="view hidden"></section>
+  <section id="view-calendar" class="view hidden"></section>
+  <section id="view-activity" class="view hidden"></section>
+  <section id="view-memory" class="view hidden"></section>
+</main>
+
+<!-- Agent Info Popup -->
+<div class="agent-popup" id="agent-popup">
+  <div class="popup-header">
+    <div class="popup-avatar" id="popup-avatar"></div>
+    <div>
+      <div class="popup-name" id="popup-name"></div>
+      <div class="popup-role" id="popup-role"></div>
+    </div>
+  </div>
+  <div class="popup-section">
+    <div class="popup-label">Status</div>
+    <div class="popup-value" id="popup-status"></div>
+  </div>
+  <div class="popup-section">
+    <div class="popup-label">Current Task</div>
+    <div class="popup-value" id="popup-task"></div>
+  </div>
+  <div class="popup-section">
+    <div class="popup-label">Model</div>
+    <div class="popup-value" id="popup-model"></div>
+  </div>
+</div>
+
+<footer class="foot">
+  <span id="foot-status">—</span> · auto-refresh 30s · data: real Hermes sources
+</footer>
+
+<script src="/app.js"></script>
+<script src="/office.js"></script>
+</body>
+</html>

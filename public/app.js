@@ -366,40 +366,462 @@ async function renderMemory(el) {
     </div>`;
 }
 
-/* ============================ 2D OFFICE ============================ */
-async function renderOffice(el) {
-  const d = await api('/api/office');
-  const colors = { working: '#37c871', idle: '#4da3ff', offline: '#ff5d5d' };
+/* ============================ PIXEL ART OFFICE ============================ */
+async function renderPixelOffice(el) {
   el.innerHTML = `
-    <h2>2D Office</h2>
-    <p class="desc">Top-down office of the AI team. Desk colors reflect <b>live service state</b> (idle / working / offline).</p>
-    <div class="office-wrap">
-      <svg class="office" viewBox="0 0 400 200">
-        <rect x="4" y="4" width="392" height="192" rx="14" fill="#0f141c" stroke="#1e2836"/>
-        <rect x="30" y="150" width="340" height="34" rx="8" fill="#121821" stroke="#1e2836"/>
-        <text x="40" y="172" fill="#7d8da0" font-size="10" font-family="monospace">MEETING / SHARED TABLE — humans + agents</text>
-        ${d.desks.map(dk => `
-          <g>
-            <rect x="${300 + (parseInt(dk.x) - 10) * 0}" y="0" width="0" height="0" fill="none"/>
-            <!-- desk positioned from percentage x -->
-            <g transform="translate(${parseInt(dk.x) * 4 - 60}, 40)">
-              <ellipse cx="60" cy="46" rx="52" ry="26" fill="${colors[dk.status] || '#555'}" opacity="0.15"/>
-              <rect x="12" y="18" width="96" height="44" rx="8" fill="#121821" stroke="${colors[dk.status] || '#555'}" stroke-width="1.5"/>
-              <rect x="28" y="4" width="64" height="22" rx="4" fill="#1e2836"/>
-              <circle cx="60" cy="86" r="16" fill="${colors[dk.status] || '#555'}" opacity="0.9"/>
-              <text x="60" y="91" text-anchor="middle" fill="#0b0f14" font-size="11" font-weight="bold">${esc(dk.label.charAt(0))}</text>
-              <text x="60" y="112" text-anchor="middle" class="desk-label" fill="#d7e2ee" font-size="11">${esc(dk.label)}</text>
-              <text x="60" y="126" text-anchor="middle" class="desk-status" fill="${colors[dk.status] || '#7d8da0'}" font-size="9">${esc(dk.status.toUpperCase())}</text>
-              ${dk.claimed?.length ? `<text x="60" y="138" text-anchor="middle" fill="#7d8da0" font-size="8">${dk.claimed.length} task(s) claimed</text>` : ''}
-            </g>
-          </g>`).join('')}
-      </svg>
+    <div class="pixel-office-wrap">
+      <div class="pixel-room" id="pixel-room">
+        <div style="padding:40px;text-align:center;color:var(--muted)">Loading office...</div>
+      </div>
+      <div class="pixel-sidebar">
+        <div class="sidebar-panel">
+          <h4>Team Members</h4>
+          <div class="user-list" id="user-list"></div>
+        </div>
+        <div class="sidebar-panel">
+          <h4>Channels</h4>
+          <div class="channel-list" id="channel-list"></div>
+        </div>
+        <div class="sidebar-panel">
+          <h4>Live Activity</h4>
+          <div class="mini-feed" id="mini-feed"></div>
+        </div>
+      </div>
     </div>
-    <div class="office-legend">
-      <span><span class="sw" style="background:${colors.working}"></span>working (claimed task / active)</span>
-      <span><span class="sw" style="background:${colors.idle}"></span>idle (up, no active work)</span>
-      <span><span class="sw" style="background:${colors.offline}"></span>offline / not installed</span>
+    <div class="agent-popup" id="agent-popup">
+      <div class="popup-header">
+        <div class="popup-avatar" id="popup-avatar"></div>
+        <div>
+          <div class="popup-name" id="popup-name"></div>
+          <div class="popup-role" id="popup-role"></div>
+        </div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-label">Status</div>
+        <div class="popup-value" id="popup-status"></div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-label">Current Task</div>
+        <div class="popup-value" id="popup-task"></div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-label">Model</div>
+        <div class="popup-value" id="popup-model"></div>
+      </div>
     </div>`;
+  
+  try {
+    const [agents, dashboard, activity] = await Promise.all([
+      api('/api/agents'),
+      api('/api/dashboard'),
+      api('/api/activity'),
+    ]);
+    
+    window._pixelAgents = processAgentData(agents.agents);
+    window._pixelDashboard = dashboard;
+    window._pixelActivity = activity;
+    
+    renderPixelRoom('workspace');
+    updateStatusSummary();
+    updateUserList();
+    updateChannelList();
+    updateMiniFeed();
+  } catch (e) {
+    el.innerHTML = `<div class="card"><h3>Failed to load office</h3><div class="notice">${esc(e.message)}</div></div>`;
+  }
+}
+
+function processAgentData(rawAgents) {
+  return rawAgents.map(a => {
+    let status = 'offline';
+    if (a.opencode) {
+      status = a.opencode.present ? 'idle' : 'offline';
+    } else if (a.service) {
+      if (a.service.state === 'up') {
+        status = a.claimed_tasks?.length ? 'working' : 'idle';
+      }
+    }
+    return {
+      name: a.name,
+      label: a.label,
+      role: a.role,
+      status,
+      task: a.claimed_tasks?.[0]?.title || null,
+      model: a.model?.default_model || null,
+      service: a.service,
+      claimed: a.claimed_tasks || [],
+    };
+  });
+}
+
+const AGENT_COLORS = {
+  default: { primary: '#4da3ff', secondary: '#2d5aa0', accent: '#7db8ff' },
+  leadenginer: { primary: '#37c871', secondary: '#1e8a4a', accent: '#6dd89a' },
+  opencode: { primary: '#b48cff', secondary: '#7d4fbf', accent: '#d4b8ff' },
+};
+
+function renderPixelRoom(room) {
+  const container = document.getElementById('pixel-room');
+  if (!container || !window._pixelAgents) return;
+  
+  const SCALE = 4;
+  const COLORS = {
+    floor: '#8b7355', floorDark: '#6b5540', wall: '#4a5568', wallLight: '#5a6578',
+    ceiling: '#2d3748', window: '#87ceeb', windowFrame: '#4a5568', windowPane: '#b8e4f7',
+    door: '#6b4423', doorFrame: '#4a3728', doorHandle: '#c9a227',
+    desk: '#8b6914', deskTop: '#a07818', deskLeg: '#6b4423',
+    chair: '#4a5568', chairSeat: '#5a6578',
+    monitor: '#1a202c', monitorScreen: '#2d3748',
+    plant: '#48bb78', plantDark: '#2f855a', pot: '#8b6914',
+    cooler: '#63b3ed', coolerWater: '#90cdf4',
+    shelf: '#6b5540', book1: '#e53e3e', book2: '#38a169', book3: '#3182ce', book4: '#d69e2e',
+    whiteboard: '#e2e8f0', whiteboardFrame: '#4a5568', rug: '#744210',
+    clock: '#e2e8f0', clockFace: '#f7fafc', clockHand: '#2d3748',
+    sofa: '#744210', sofaBack: '#8b5e3c', sofaArm: '#5c3317',
+    tv: '#1a202c', tvScreen: '#2d3748',
+  };
+  
+  const W = 200, H = 140;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="pixel-svg" xmlns="http://www.w3.org/2000/svg">`;
+  
+  if (room === 'workspace') {
+    // Floor
+    svg += `<rect x="0" y="80" width="${W}" height="60" fill="${COLORS.floor}"/>`;
+    svg += `<rect x="0" y="80" width="${W}" height="4" fill="${COLORS.floorDark}"/>`;
+    // Wall
+    svg += `<rect x="0" y="0" width="${W}" height="80" fill="${COLORS.wall}"/>`;
+    svg += `<rect x="0" y="0" width="${W}" height="4" fill="${COLORS.wallLight}"/>`;
+    svg += `<rect x="0" y="76" width="${W}" height="4" fill="${COLORS.wallLight}"/>`;
+    
+    // Windows
+    // Left window
+    svg += `<rect x="10" y="12" width="36" height="32" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="14" y="16" width="28" height="24" fill="${COLORS.window}"/>`;
+    svg += `<rect x="26" y="16" width="2" height="24" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="14" y="26" width="28" height="2" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="16" y="18" width="10" height="6" fill="${COLORS.windowPane}"/>`;
+    svg += `<rect x="32" y="18" width="10" height="6" fill="${COLORS.windowPane}"/>`;
+    // Right window
+    svg += `<rect x="154" y="12" width="36" height="32" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="158" y="16" width="28" height="24" fill="${COLORS.window}"/>`;
+    svg += `<rect x="170" y="16" width="2" height="24" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="158" y="26" width="28" height="2" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="160" y="18" width="10" height="6" fill="${COLORS.windowPane}"/>`;
+    svg += `<rect x="176" y="18" width="10" height="6" fill="${COLORS.windowPane}"/>`;
+    
+    // Door
+    svg += `<rect x="82" y="20" width="36" height="56" fill="${COLORS.doorFrame}"/>`;
+    svg += `<rect x="86" y="24" width="28" height="48" fill="${COLORS.door}"/>`;
+    svg += `<rect x="108" y="44" width="4" height="4" fill="${COLORS.doorHandle}"/>`;
+    svg += `<rect x="86" y="48" width="28" height="2" fill="#5a3a1a"/>`;
+    svg += `<rect x="86" y="72" width="28" height="2" fill="#5a3a1a"/>`;
+    
+    // Clock
+    svg += `<rect x="94" y="8" width="12" height="12" fill="${COLORS.clock}"/>`;
+    svg += `<rect x="96" y="10" width="8" height="8" fill="${COLORS.clockFace}"/>`;
+    svg += `<rect x="99" y="10" width="2" height="4" fill="${COLORS.clockHand}"/>`;
+    svg += `<rect x="99" y="10" width="4" height="2" fill="${COLORS.clockHand}"/>`;
+    
+    // Bookshelf
+    svg += `<rect x="4" y="40" width="6" height="36" fill="${COLORS.shelf}"/>`;
+    svg += `<rect x="10" y="36" width="16" height="4" fill="${COLORS.shelf}"/>`;
+    svg += `<rect x="10" y="64" width="16" height="4" fill="${COLORS.shelf}"/>`;
+    svg += `<rect x="12" y="40" width="4" height="20" fill="${COLORS.book1}"/>`;
+    svg += `<rect x="17" y="42" width="4" height="18" fill="${COLORS.book2}"/>`;
+    svg += `<rect x="22" y="38" width="4" height="22" fill="${COLORS.book3}"/>`;
+    svg += `<rect x="14" y="48" width="3" height="12" fill="${COLORS.book4}"/>`;
+    
+    // Whiteboard
+    svg += `<rect x="174" y="36" width="20" height="28" fill="${COLORS.whiteboardFrame}"/>`;
+    svg += `<rect x="176" y="38" width="16" height="24" fill="${COLORS.whiteboard}"/>`;
+    svg += `<rect x="178" y="42" width="12" height="2" fill="#a0aec0"/>`;
+    svg += `<rect x="178" y="48" width="10" height="2" fill="#a0aec0"/>`;
+    svg += `<rect x="178" y="54" width="14" height="2" fill="#a0aec0"/>`;
+    
+    // Water cooler
+    svg += `<rect x="92" y="52" width="16" height="24" fill="${COLORS.cooler}"/>`;
+    svg += `<rect x="94" y="54" width="12" height="18" fill="${COLORS.coolerWater}"/>`;
+    svg += `<rect x="96" y="56" width="8" height="14" fill="#bee3f8"/>`;
+    svg += `<rect x="98" y="72" width="4" height="4" fill="${COLORS.cooler}"/>`;
+    
+    // Desks (2 rows)
+    const desks = [
+      {x:20,y:68}, {x:60,y:68}, {x:120,y:68}, {x:160,y:68},
+      {x:20,y:100}, {x:60,y:100}, {x:120,y:100}, {x:160,y:100},
+    ];
+    desks.forEach((d, i) => {
+      svg += `<rect x="${d.x}" y="${d.y}" width="32" height="8" fill="${COLORS.deskTop}"/>`;
+      svg += `<rect x="${d.x}" y="${d.y+8}" width="32" height="12" fill="${COLORS.desk}"/>`;
+      svg += `<rect x="${d.x+2}" y="${d.y+20}" width="4" height="8" fill="${COLORS.deskLeg}"/>`;
+      svg += `<rect x="${d.x+26}" y="${d.y+20}" width="4" height="8" fill="${COLORS.deskLeg}"/>`;
+      svg += `<rect x="${d.x+10}" y="${d.y-12}" width="12" height="10" fill="${COLORS.monitor}"/>`;
+      svg += `<rect x="${d.x+12}" y="${d.y-10}" width="8" height="6" fill="${COLORS.monitorScreen}"/>`;
+      svg += `<rect x="${d.x+14}" y="${d.y-8}" width="4" height="2" fill="rgba(77,163,255,0.3)"/>`;
+      svg += `<rect x="${d.x+8}" y="${d.y+24}" width="16" height="6" fill="${COLORS.chairSeat}"/>`;
+      svg += `<rect x="${d.x+10}" y="${d.y+30}" width="12" height="6" fill="${COLORS.chair}"/>`;
+    });
+    
+    // Plants
+    svg += `<rect x="8" y="116" width="8" height="8" fill="${COLORS.pot}"/>`;
+    svg += `<rect x="10" y="108" width="4" height="8" fill="${COLORS.plant}"/>`;
+    svg += `<rect x="14" y="110" width="4" height="6" fill="${COLORS.plantDark}"/>`;
+    svg += `<rect x="12" y="106" width="2" height="2" fill="${COLORS.plant}"/>`;
+    svg += `<rect x="184" y="116" width="8" height="8" fill="${COLORS.pot}"/>`;
+    svg += `<rect x="186" y="108" width="4" height="8" fill="${COLORS.plant}"/>`;
+    svg += `<rect x="190" y="110" width="4" height="6" fill="${COLORS.plantDark}"/>`;
+    svg += `<rect x="188" y="106" width="2" height="2" fill="${COLORS.plant}"/>`;
+    
+    // Rug
+    svg += `<rect x="60" y="96" width="80" height="12" fill="${COLORS.rug}"/>`;
+    svg += `<rect x="62" y="98" width="76" height="8" fill="#8b5e3c"/>`;
+    
+  } else { // lounge
+    // Floor
+    svg += `<rect x="0" y="80" width="${W}" height="60" fill="#744210"/>`;
+    svg += `<rect x="0" y="80" width="${W}" height="4" fill="#5c3317"/>`;
+    // Wall
+    svg += `<rect x="0" y="0" width="${W}" height="80" fill="#553c2a"/>`;
+    svg += `<rect x="0" y="0" width="${W}" height="4" fill="#6b4c3a"/>`;
+    svg += `<rect x="0" y="76" width="${W}" height="4" fill="#6b4c3a"/>`;
+    
+    // Large window
+    svg += `<rect x="60" y="16" width="80" height="40" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="64" y="20" width="72" height="32" fill="${COLORS.window}"/>`;
+    svg += `<rect x="98" y="20" width="2" height="32" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="64" y="34" width="72" height="2" fill="${COLORS.windowFrame}"/>`;
+    svg += `<rect x="68" y="24" width="28" height="8" fill="${COLORS.windowPane}"/>`;
+    svg += `<rect x="108" y="24" width="28" height="8" fill="${COLORS.windowPane}"/>`;
+    
+    // TV
+    svg += `<rect x="160" y="24" width="32" height="24" fill="#1a202c"/>`;
+    svg += `<rect x="162" y="26" width="28" height="20" fill="#2d3748"/>`;
+    svg += `<rect x="170" y="30" width="12" height="8" fill="rgba(77,163,255,0.4)"/>`;
+    svg += `<rect x="172" y="48" width="8" height="4" fill="#4a5568"/>`;
+    
+    // Sofa
+    svg += `<rect x="20" y="64" width="48" height="16" fill="${COLORS.sofa}"/>`;
+    svg += `<rect x="20" y="52" width="48" height="12" fill="${COLORS.sofaBack}"/>`;
+    svg += `<rect x="16" y="64" width="4" height="16" fill="${COLORS.sofaArm}"/>`;
+    svg += `<rect x="64" y="64" width="4" height="16" fill="${COLORS.sofaArm}"/>`;
+    svg += `<rect x="24" y="80" width="4" height="8" fill="#4a3015"/>`;
+    svg += `<rect x="56" y="80" width="4" height="8" fill="#4a3015"/>`;
+    
+    // Coffee table
+    svg += `<rect x="76" y="72" width="24" height="4" fill="${COLORS.deskTop}"/>`;
+    svg += `<rect x="80" y="76" width="4" height="8" fill="${COLORS.deskLeg}"/>`;
+    svg += `<rect x="92" y="76" width="4" height="8" fill="${COLORS.deskLeg}"/>`;
+    
+    // Plant
+    svg += `<rect x="12" y="108" width="8" height="8" fill="${COLORS.pot}"/>`;
+    svg += `<rect x="14" y="100" width="4" height="8" fill="${COLORS.plant}"/>`;
+    svg += `<rect x="18" y="102" width="4" height="6" fill="${COLORS.plantDark}"/>`;
+    
+    // Rug
+    svg += `<rect x="50" y="96" width="60" height="10" fill="#5c3317"/>`;
+    svg += `<rect x="52" y="98" width="56" height="6" fill="#744210"/>`;
+  }
+  
+  // Render agents
+  const workingAgents = window._pixelAgents.filter(a => a.status === 'working');
+  const idleAgents = window._pixelAgents.filter(a => a.status === 'idle');
+  const offlineAgents = window._pixelAgents.filter(a => a.status === 'offline');
+  
+  // Working agents at desks (top row)
+  workingAgents.forEach((agent, i) => {
+    if (i < 4) {
+      const pos = [20, 60, 120, 160][i];
+      svg += renderAgentPixel(pos, 56, agent);
+    }
+  });
+  
+  // Idle agents in lounge
+  idleAgents.forEach((agent, i) => {
+    const pos = i === 0 ? {x: 28, y: 48} : {x: 84, y: 64};
+    svg += renderAgentPixel(pos.x, pos.y, agent);
+  });
+  
+  // Offline agents dimmed
+  offlineAgents.forEach((agent, i) => {
+    const pos = [160, 60][i] || 20;
+    svg += renderAgentPixel(pos, 56, agent, true);
+  });
+  
+  svg += '</svg>';
+  container.innerHTML = svg;
+  container.classList.add('room-enter');
+  
+  // Add click handlers
+  container.querySelectorAll('.agent-pixel').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const name = el.dataset.agent;
+      const agent = window._pixelAgents.find(a => a.name === name);
+      if (agent) showAgentPopup(agent, e);
+    });
+  });
+}
+
+function renderAgentPixel(x, y, agent, offline = false) {
+  const colors = AGENT_COLORS[agent.name] || AGENT_COLORS.default;
+  const opacity = offline ? 'opacity="0.3"' : '';
+  const statusColor = offline ? '#666' : (agent.status === 'working' ? '#48bb78' : colors.primary);
+  
+  return `
+    <g class="agent-pixel" data-agent="${agent.name}" ${opacity}>
+      <!-- Body -->
+      <rect x="${x+4}" y="${y+8}" width="8" height="12" fill="${colors.primary}"/>
+      <!-- Head -->
+      <rect x="${x+6}" y="${y+0}" width="6" height="6" fill="${colors.accent}"/>
+      <!-- Eyes -->
+      <rect x="${x+8}" y="${y+2}" width="2" height="2" fill="#0b0f14"/>
+      <rect x="${x+12}" y="${y+2}" width="2" height="2" fill="#0b0f14"/>
+      <!-- Arms -->
+      <rect x="${x+0}" y="${y+10}" width="4" height="8" fill="${colors.secondary}"/>
+      <rect x="${x+12}" y="${y+10}" width="4" height="8" fill="${colors.secondary}"/>
+      <!-- Status dot -->
+      <rect x="${x+7}" y="${y-4}" width="2" height="2" fill="${statusColor}"/>
+    </g>`;
+}
+
+function updateStatusSummary() {
+  if (!window._pixelAgents) return;
+  const working = window._pixelAgents.filter(a => a.status === 'working').length;
+  const idle = window._pixelAgents.filter(a => a.status === 'idle').length;
+  const offline = window._pixelAgents.filter(a => a.status === 'offline').length;
+  
+  document.getElementById('count-working').textContent = working;
+  document.getElementById('count-idle').textContent = idle;
+  document.getElementById('count-offline').textContent = offline;
+}
+
+function updateUserList() {
+  if (!window._pixelAgents) return;
+  const list = document.getElementById('user-list');
+  list.innerHTML = window._pixelAgents.map(a => {
+    const colors = AGENT_COLORS[a.name] || AGENT_COLORS.default;
+    return `
+      <div class="user-item ${a.status}" onclick="showAgentPopupFor('${a.name}')">
+        <div class="user-avatar" style="background:${colors.primary}">${a.label.charAt(0)}</div>
+        <div class="user-info">
+          <div class="user-name">${a.label}</div>
+          <div class="user-status ${a.status}">${a.status}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function showAgentPopupFor(name) {
+  const agent = window._pixelAgents?.find(a => a.name === name);
+  if (!agent) return;
+  const fakeEvent = { target: document.activeElement, stopPropagation: () => {} };
+  showAgentPopup(agent, fakeEvent);
+}
+
+function showAgentPopup(agent, event) {
+  const popup = document.getElementById('agent-popup');
+  const colors = AGENT_COLORS[agent.name] || AGENT_COLORS.default;
+  
+  document.getElementById('popup-avatar').innerHTML = `<span style="color:${colors.primary};font-size:16px;font-weight:700">${agent.label.charAt(0)}</span>`;
+  document.getElementById('popup-name').textContent = agent.label;
+  document.getElementById('popup-role').textContent = agent.role || 'AI Agent';
+  document.getElementById('popup-status').innerHTML = `<span class="pill ${agent.status === 'working' ? 'up' : agent.status === 'idle' ? 'warn' : 'down'}"><span class="dot"></span>${agent.status}</span>`;
+  document.getElementById('popup-task').textContent = agent.task || 'No active task';
+  document.getElementById('popup-model').textContent = agent.model || '—';
+  
+  const rect = event.target.getBoundingClientRect();
+  popup.style.left = `${rect.left + rect.width / 2 - 120}px`;
+  popup.style.top = `${rect.top - 10}px`;
+  popup.classList.add('visible');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('agent-popup')?.classList.remove('visible');
+});
+
+function updateChannelList() {
+  if (!window._pixelDashboard) return;
+  const list = document.getElementById('channel-list');
+  const platforms = window._pixelDashboard.platforms || [];
+  
+  if (!platforms.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted)">No channel data available</div>';
+    return;
+  }
+  
+  list.innerHTML = platforms.map(p => `
+    <div class="channel-item">
+      <span class="channel-name">${p.platform}</span>
+      <span class="channel-status ${p.state === 'connected' ? '' : 'disconnected'}">${p.state}</span>
+    </div>
+  `).join('');
+}
+
+function updateMiniFeed() {
+  if (!window._pixelActivity) return;
+  const feed = document.getElementById('mini-feed');
+  const items = window._pixelActivity.items?.slice(0, 5) || [];
+  
+  if (!items.length) {
+    feed.innerHTML = '<div style="font-size:12px;color:var(--muted)">No recent activity</div>';
+    return;
+  }
+  
+  feed.innerHTML = items.map(i => {
+    const time = i.ts ? new Date(i.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+    return `
+      <div class="mini-feed-item">
+        <span class="mini-feed-kind ${i.kind}">${i.kind.replace('-', ' ')}</span>
+        <span class="mini-feed-text">${i.title || ''}</span>
+        <span class="mini-feed-time">${time}</span>
+      </div>`;
+  }).join('');
+}
+
+window.switchRoom = function(room) {
+  currentRoom = room;
+  renderPixelRoom(room);
+  document.getElementById('btn-workspace').className = room === 'workspace' ? 'primary' : 'ghost';
+  document.getElementById('btn-lounge').className = room === 'lounge' ? 'primary' : 'ghost';
+};
+
+async function renderOffice(el) {
+  el.innerHTML = `
+    <h2>Visual Office</h2>
+    <p class="desc">Real-time pixel-art office showing agent states from Hermes data sources.</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button id="btn-workspace" class="primary" onclick="switchRoom('workspace')">🖥️ Workspace</button>
+      <button id="btn-lounge" class="ghost" onclick="switchRoom('lounge')">🛋️ Lounge</button>
+    </div>
+    <div class="status-summary" id="status-summary">
+      <div class="status-item"><span class="status-dot working"></span><span>Working: <b id="count-working">0</b></span></div>
+      <div class="status-item"><span class="status-dot idle"></span><span>Idle: <b id="count-idle">0</b></span></div>
+      <div class="status-item"><span class="status-dot offline"></span><span>Offline: <b id="count-offline">0</b></span></div>
+    </div>
+    <div id="office-container"></div>`;
+  
+  // Move the container to where we need it
+  const container = document.getElementById('office-container');
+  container.innerHTML = '<div class="pixel-office-wrap" id="pixel-office-wrap"><div class="pixel-room" id="pixel-room"><div style="padding:40px;text-align:center;color:var(--muted)">Loading office...</div></div><div class="pixel-sidebar"><div class="sidebar-panel"><h4>Team Members</h4><div class="user-list" id="user-list"></div></div><div class="sidebar-panel"><h4>Channels</h4><div class="channel-list" id="channel-list"></div></div><div class="sidebar-panel"><h4>Live Activity</h4><div class="mini-feed" id="mini-feed"></div></div></div></div><div class="agent-popup" id="agent-popup"><div class="popup-header"><div class="popup-avatar" id="popup-avatar"></div><div><div class="popup-name" id="popup-name"></div><div class="popup-role" id="popup-role"></div></div></div><div class="popup-section"><div class="popup-label">Status</div><div class="popup-value" id="popup-status"></div></div><div class="popup-section"><div class="popup-label">Current Task</div><div class="popup-value" id="popup-task"></div></div><div class="popup-section"><div class="popup-label">Model</div><div class="popup-value" id="popup-model"></div></div></div>';
+  
+  try {
+    const [agents, dashboard, activity] = await Promise.all([
+      api('/api/agents'),
+      api('/api/dashboard'),
+      api('/api/activity'),
+    ]);
+    
+    window._pixelAgents = processAgentData(agents.agents);
+    window._pixelDashboard = dashboard;
+    window._pixelActivity = activity;
+    
+    renderPixelRoom('workspace');
+    updateStatusSummary();
+    updateUserList();
+    updateChannelList();
+    updateMiniFeed();
+  } catch (e) {
+    el.innerHTML = `<div class="card"><h3>Failed to load office</h3><div class="notice">${esc(e.message)}</div></div>`;
+  }
 }
 
 /* ============================ NAVIGATION + LOOP ============================ */
