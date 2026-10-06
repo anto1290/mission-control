@@ -37,39 +37,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuthInternal = async () => {
     setLoading(true);
     try {
-      // Use Bearer token if available
-      if (config.token) {
-        const result = await checkAuthWithToken();
-        if (result.authenticated) {
-          setAuthenticated(true);
-          setUser(result.user);
-          setLoading(false);
-          setInitialized(true);
-          return;
-        }
-      }
+      // DISABLED: Bearer token check - auth temporarily off
+      // if (config.token) {
+      //   const result = await checkAuthWithToken();
+      //   if (result.authenticated) {
+      //     setAuthenticated(true);
+      //     setUser(result.user);
+      //     setLoading(false);
+      //     setInitialized(true);
+      //     return;
+      //   }
+      // }
 
-      // Try to get current session first (cookie-based)
-      const result = await checkAuth();
+      // DISABLED: Cookie-based auth - auth temporarily off
+      // const result = await checkAuth();
+      // if (result.authenticated) {
+      //   setAuthenticated(true);
+      //   setUser(result.user);
+      //   return;
+      // }
 
-      if (result.authenticated) {
-        setAuthenticated(true);
-        setUser(result.user);
-        return;
-      }
+      // DISABLED: Auto-login - auth temporarily off
+      // if (config.password) {
+      //   const success = await doLogin(config.username, config.password);
+      //   if (success) {
+      //     const authResult = await checkAuth();
+      //     setAuthenticated(authResult.authenticated);
+      //     setUser(authResult.user);
+      //     return;
+      //   }
+      // }
 
-      // If no session and we have credentials, auto-login
-      if (config.password) {
-        const success = await doLogin(config.username, config.password);
-        if (success) {
-          const authResult = await checkAuth();
-          setAuthenticated(authResult.authenticated);
-          setUser(authResult.user);
-          return;
-        }
-      }
-
-      setAuthenticated(false);
+      setAuthenticated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Auth check failed');
     } finally {

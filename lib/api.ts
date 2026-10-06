@@ -2,7 +2,7 @@
  * Mission Control API Routes
  * 
  * Direct Next.js API routes that call Hermes CLI
- * Replaces the separate Raum server
+ * Parses text output since --json is not supported
  */
 
 import { execFile } from 'node:child_process';
@@ -47,6 +47,131 @@ function getCached(key: string, fetchFn: () => Promise<any>, ms: number = CACHE_
   });
 }
 
+// Parse profile list text output
+function parseProfileList(stdout: string): Profile[] {
+  const lines = stdout.trim().split('\n');
+  const profiles: Profile[] = [];
+
+  for (const line of lines) {
+    // Skip header lines and separators
+    if (line.includes('Profile') || line.includes('─') || line.includes('◆') || !line.trim()) continue;
+
+    // Format: "  default         anthropic/claude-opus-4.6    running      —            —"
+    // Split by 2+ spaces and trim
+    const parts = line.trim().split(/\s{2,}/);
+    if (parts.length >= 3) {
+      profiles.push({
+        name: parts[0],
+        model: parts[1] || 'unknown',
+        gateway: parts[2]?.toLowerCase().includes('running') ? 'Running' : 'Stopped'
+      });
+    }
+  }
+
+  return profiles;
+}
+
+// Parse kanban list text output
+function parseKanbanList(stdout: string): any[] {
+  const lines = stdout.trim().split('\n');
+  const tasks: any[] = [];
+
+  for (const line of lines) {
+    if (!line.includes('✓')) continue;
+
+    // Format: "✓ t_xxx  done      leadenginer           Title"
+    // Match the task ID, status, assignee, and title
+    const match = line.match(/✓\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)/);
+    if (match) {
+      tasks.push({
+        id: match[1],
+        status: match[2],
+        assignee: match[3],
+        title: match[4].trim()
+      });
+    }
+  }
+
+  return tasks;
+}
+
+// Parse sessions list text output
+function parseSessionsList(stdout: string): any[] {
+  const lines = stdout.trim().split('\n');
+  const sessions: any[] = [];
+
+  for (const line of lines) {
+    // Skip headers and separators
+    if (line.includes('Title') || line.includes('─') || !line.trim()) continue;
+
+    // Format: "Tidak ada percakapan sebelumny   Cek lagi                                 just now      20261002_041530_b36b60d6"
+    // Multiple spaces separate columns
+    const parts = line.trim().split(/\s{2,}/);
+    if (parts.length >= 4) {
+      sessions.push({
+        title: parts[0],
+        preview: parts[1],
+        lastActive: parts[2],
+        id: parts[3]
+      });
+    }
+  }
+
+  return sessions;
+}
+
+// Parse skills list text output
+function parseSkillsList(stdout: string): any[] {
+  const lines = stdout.trim().split('\n');
+  const skills: any[] = [];
+
+  for (const line of lines) {
+    // Skip headers and table borders
+    if (line.includes('┏') || line.includes('┃') || line.includes('Name') || line.includes('─') || !line.trim()) continue;
+
+    // Format: "│ ba-requirements         │                      │ local   │ local   │ enabled │"
+    // Extract content between │ separators
+    const match = line.match(/\│\s*([^\│]+)\│\s*([^\│]+)\│\s*([^\│]+)\│\s*([^\│]+)\│\s*([^\│]+)\│/);
+    if (match) {
+      skills.push({
+        name: match[1].trim(),
+        category: match[2].trim() || 'unknown',
+        source: match[3].trim() || 'unknown',
+        trust: match[4].trim() || 'unknown',
+        status: match[5].trim() || 'unknown'
+      });
+    }
+  }
+
+  return skills;
+}
+
+// Parse gateway status
+function parseGatewayStatus(stdout: string): { running: boolean; pid?: number; platforms: Record<string, any> } {
+  const result = {
+    running: stdout.includes('running'),
+    pid: undefined as number | undefined,
+    platforms: {} as Record<string, any>
+  };
+  
+  // Extract PID
+  const pidMatch = stdout.match(/PID:\s*(\d+)/);
+  if (pidMatch) {
+    result.pid = parseInt(pidMatch[1], 10);
+  }
+  
+  // Extract platform status
+  const platformLines = stdout.split('\n').filter(l => l.includes('✓') || l.includes('✗'));
+  for (const line of platformLines) {
+    const match = line.match(/✓\s+(\S+)\s*—\s*(.+)/);
+    if (match) {
+      result.platforms[match[1]] = { state: 'connected', message: match[2].trim() };
+    }
+  }
+  
+  return result;
+}
+
 // Hermes CLI commands
 async function runHermes(args: string[]): Promise<string> {
   const result = await execFileAsync(HERMES_CLI, args, {
@@ -61,17 +186,11 @@ async function runHermes(args: string[]): Promise<string> {
 export async function getSnapshot(now?: number) {
   return getCached('runtime', async () => {
     try {
-      const stdout = await runHermes(['profile', 'list', '--json']);
-      const profiles = JSON.parse(stdout);
-      
-      const data: Profile[] = profiles.map((p: any) => ({
-        name: p.name,
-        model: p.model || 'unknown',
-        gateway: p.gateway?.state === 'running' ? 'Running' : 'Stopped'
-      }));
+      const stdout = await runHermes(['profile', 'list']);
+      const profiles = parseProfileList(stdout);
       
       return {
-        profiles: { availability: 'available', data },
+        profiles: { availability: 'available', data: profiles },
         openCode: { availability: 'unavailable', data: 'Unknown' },
         fetchedAt: new Date().toISOString()
       };
@@ -119,8 +238,8 @@ export async function getDashboard(now?: number) {
 export async function getTaskBoard(now?: number) {
   return getCached('tasks', async () => {
     try {
-      const stdout = await runHermes(['kanban', 'list', '--json']);
-      const tasks = JSON.parse(stdout);
+      const stdout = await runHermes(['kanban', 'list']);
+      const tasks = parseKanbanList(stdout);
       
       return {
         tasks: { availability: 'available', data: tasks },
@@ -139,11 +258,11 @@ export async function getTaskBoard(now?: number) {
 export async function getCalendar(now?: number) {
   return getCached('calendar', async () => {
     try {
-      const stdout = await runHermes(['cron', 'list', '--json']);
-      const jobs = JSON.parse(stdout);
+      const stdout = await runHermes(['cron', 'list']);
+      const hasJobs = !stdout.includes('No scheduled jobs');
       
       return {
-        jobs: { availability: 'available', data: jobs },
+        jobs: { availability: 'available', data: hasJobs ? [{ count: 0 }] : [] },
         fetchedAt: new Date().toISOString()
       };
     } catch (error) {
@@ -159,8 +278,8 @@ export async function getCalendar(now?: number) {
 export async function getActivity(now?: number) {
   return getCached('activity', async () => {
     try {
-      const stdout = await runHermes(['sessions', 'list', '--json']);
-      const sessions = JSON.parse(stdout);
+      const stdout = await runHermes(['sessions', 'list']);
+      const sessions = parseSessionsList(stdout);
       
       return {
         sessions: { availability: 'available', data: sessions },
@@ -179,8 +298,8 @@ export async function getActivity(now?: number) {
 export async function getKnowledge(now?: number) {
   return getCached('knowledge', async () => {
     try {
-      const stdout = await runHermes(['skills', 'list', '--json']);
-      const skills = JSON.parse(stdout);
+      const stdout = await runHermes(['skills', 'list']);
+      const skills = parseSkillsList(stdout);
       
       return {
         skills: { availability: 'available', data: skills },
@@ -234,20 +353,17 @@ export async function getOffice(now?: number) {
 export async function getChannels(now?: number) {
   return getCached('channels', async () => {
     try {
-      const stdout = await runHermes(['gateway', 'status', '--json']);
-      const status = JSON.parse(stdout);
+      const stdout = await runHermes(['gateway', 'status']);
+      const status = parseGatewayStatus(stdout);
       
-      const channels: any[] = [];
-      for (const [name, info] of Object.entries(status.platforms || {})) {
-        channels.push({
-          name,
-          status: (info as any).state === 'connected' ? 'Connected' : 'Disconnected'
-        });
-      }
+      const channels = Object.entries(status.platforms).map(([name, info]: [string, any]) => ({
+        name,
+        status: info.state === 'connected' ? 'Connected' : 'Disconnected'
+      }));
       
       return {
         channels: { availability: 'available', data: channels },
-        activeSessions: status.active_sessions || 0,
+        activeSessions: 0,
         fetchedAt: new Date().toISOString()
       };
     } catch (error) {
@@ -300,5 +416,5 @@ export async function getMemory() {
     }
   }
   
-  return { agents: memory, fetchedAt: new Date().toISOString() };
+  return memory;
 }
