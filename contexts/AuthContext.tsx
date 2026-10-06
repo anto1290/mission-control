@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Config from environment
   const config = {
+    token: process.env.NEXT_PUBLIC_AUTH_TOKEN || '',
     username: process.env.NEXT_PUBLIC_AUTH_USER || 'agent-IYXFRf42',
     password: process.env.NEXT_PUBLIC_AUTH_PASSWORD || '',
     provider: process.env.NEXT_PUBLIC_AUTH_PROVIDER || 'basic',
@@ -36,15 +37,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuthInternal = async () => {
     setLoading(true);
     try {
-      // Try to get current session first
+      // Use Bearer token if available
+      if (config.token) {
+        const result = await checkAuthWithToken();
+        if (result.authenticated) {
+          setAuthenticated(true);
+          setUser(result.user);
+          setLoading(false);
+          setInitialized(true);
+          return;
+        }
+      }
+
+      // Try to get current session first (cookie-based)
       const result = await checkAuth();
-      
+
       if (result.authenticated) {
         setAuthenticated(true);
         setUser(result.user);
         return;
       }
-      
+
       // If no session and we have credentials, auto-login
       if (config.password) {
         const success = await doLogin(config.username, config.password);
@@ -55,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
       }
-      
+
       setAuthenticated(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Auth check failed');
@@ -84,7 +97,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`${config.dashboardUrl}/api/auth/me`, {
         credentials: 'include',
       });
-      
+
+      if (response.ok) {
+        const user = await response.json();
+        return { authenticated: true, user };
+      }
+      return { authenticated: false, user: null };
+    } catch {
+      return { authenticated: false, user: null };
+    }
+  };
+
+  const checkAuthWithToken = async (): Promise<{ authenticated: boolean; user: any }> => {
+    try {
+      const response = await fetch(`${config.dashboardUrl}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${config.token}`,
+        },
+      });
+
       if (response.ok) {
         const user = await response.json();
         return { authenticated: true, user };
