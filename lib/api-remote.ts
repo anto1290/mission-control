@@ -41,7 +41,6 @@ export async function getTasks() {
   const response = await fetch(`${HERMES_API_URL}/api/plugins/kanban/board`, { headers: authHeaders });
   const data = await response.json();
   
-  // Find all tasks from all columns
   const tasks = data.columns?.flatMap((col: any) => col.tasks || []) || [];
   
   return {
@@ -134,28 +133,38 @@ export async function getChannels() {
 
 // GET /api/office
 export async function getOffice() {
-  const response = await fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders });
-  const data = await response.json();
-  const profiles = data.profiles || data;
-  
-  const stations = (Array.isArray(profiles) ? profiles : []).map((profile: any, index: number) => ({
-    id: profile.name,
-    name: profile.name,
-    role: 'Agent',
-    room: index < 2 ? 'Workspace' : 'Lounge',
-    state: profile.gateway_running ? 'Working' : 'Offline',
-    activity: profile.gateway_running ? 'Active' : 'Idle',
-    seat: index + 1,
-    freshness: new Date().toISOString()
-  }));
-  
-  const summary = {
-    declared: stations.length,
-    active: stations.filter(s => s.state === 'Working').length,
-    offline: stations.filter(s => s.state === 'Offline').length
-  };
-  
-  return { stations, summary, fetchedAt: new Date().toISOString() };
+  try {
+    const response = await fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const data = await response.json();
+    const profiles = data.profiles || data;
+    
+    const stations = (Array.isArray(profiles) ? profiles : []).map((profile: any, index: number) => ({
+      id: profile.name,
+      name: profile.name,
+      model: profile.model,
+      state: profile.gateway_running ? 'Working' : 'Offline',
+      room: ['Workspace', 'Lounge', 'Meeting'][index % 3],
+      seat: index + 1,
+      color: ['#5b9bd5', '#4fb986', '#e07b39', '#9f7aea', '#f59e42', '#f472b6', '#60a5fa', '#a78bfa', '#34d399'][index] || '#5b9bd5',
+      freshness: new Date().toISOString()
+    }));
+    
+    const summary = {
+      declared: stations.length,
+      active: stations.filter(s => s.state === 'Working').length,
+      offline: stations.filter(s => s.state === 'Offline').length
+    };
+    
+    return { stations, summary, fetchedAt: new Date().toISOString() };
+  } catch (error) {
+    return {
+      stations: [],
+      summary: { declared: 0, active: 0, offline: 0 },
+      fetchedAt: new Date().toISOString()
+    };
+  }
 }
 
 // GET /api/dashboard

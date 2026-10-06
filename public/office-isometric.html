@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control - Isometric Office</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0b0e0c 0%, #151916 100%);
+            min-height: 100vh;
+            color: #e5e1d8;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: rgba(26, 33, 28, 0.95);
+            border-right: 1px solid #2a332d;
+            padding: 24px;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 32px;
+            color: #e5e1d8;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .nav-item.active {
+            background: rgba(79, 185, 134, 0.15);
+            color: #4fb986;
+        }
+        
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            opacity: 0.7;
+        }
+        
+        /* Main content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .header {
+            padding: 20px 32px;
+            border-bottom: 1px solid #2a332d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #2a332d;
+            background: rgba(255, 255, 255, 0.05);
+            color: #e5e1d8;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #3d4f45;
+        }
+        
+        /* Office canvas container */
+        .office-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        canvas {
+            display: block;
+            cursor: grab;
+        }
+        
+        canvas:active {
+            cursor: grabbing;
+        }
+        
+        /* Controls overlay */
+        .controls {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            display: flex;
+            gap: 8px;
+        }
+        
+        .control-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid #2a332d;
+            background: rgba(26, 33, 28, 0.9);
+            color: #e5e1d8;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+        
+        .control-btn:hover {
+            background: rgba(79, 185, 134, 0.2);
+            border-color: #4fb986;
+        }
+        
+        /* Info badges */
+        .info-badges {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+        }
+        
+        .badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: rgba(26, 33, 28, 0.9);
+            border: 1px solid #2a332d;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        
+        /* Station tooltip */
+        .tooltip {
+            position: absolute;
+            background: rgba(26, 33, 28, 0.95);
+            border: 1px solid #3d4f45;
+            border-radius: 12px;
+            padding: 16px;
+            min-width: 200px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 100;
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .tooltip-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .tooltip-name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .tooltip-role {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        
+        .tooltip-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-top: 12px;
+            border-top: 1px solid #2a332d;
+            font-size: 13px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        /* Room labels */
+        .room-label {
+            position: absolute;
+            background: rgba(26, 33, 28, 0.8);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #9ca3af;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">Mission Control</div>
+            <nav>
+                <a href="/" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                    </svg>
+                    Dashboard
+                </a>
+                <a href="/agents" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                    </svg>
+                    Agents
+                </a>
+                <a href="/board" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Task Board
+                </a>
+                <a href="/calendar" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                    </svg>
+                    Calendar
+                </a>
+                <a href="/activity" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.45-.412-1.725a1 1 0 00-1.457-.891c-.507.315-.887.82-1.072 1.416-.22.702-.217 1.568-.011 2.368.216.825.684 1.57 1.28 2.128.615.574 1.416.937 2.287 1.063.185.029.368.07.545.124.593.17 1.13.5 1.555.96.45.492.71 1.12.765 1.787.04.49-.024.99-.19 1.45a4.982 4.982 0 01-1.19 1.93 5.002 5.002 0 01-4.378 1.252c-1.38-.2-2.647-.92-3.55-1.97C1.26 13.196.75 11.776.75 10.25c0-1.526.51-2.946 1.368-4.068.903-1.05 2.17-1.77 3.55-1.97a4.982 4.982 0 012.22.28z" clip-rule="evenodd"/>
+                    </svg>
+                    Activity
+                </a>
+                <a href="/office" class="nav-item active">
+                    <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 2h2a1 1 0 100-2H7a1 1 0 100 2zm0 3h2a1 1 0 110 2H7a1 1 0 110-2zm0 3h2a1 1 0 110 2H7a1 1 0 110-2z" clip-rule="evenodd"/>
+                    </svg>
+                    3D Office
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- Main content -->
+        <main class="main">
+            <header class="header">
+                <h1>3D Office</h1>
+                <div class="header-actions">
+                    <button class="btn" onclick="resetView()">Reset View</button>
+                    <button class="btn" onclick="toggleRotation()">Auto Rotate</button>
+                </div>
+            </header>
+            
+            <div class="office-container">
+                <canvas id="officeCanvas"></canvas>
+                
+                <div class="controls">
+                    <button class="control-btn" onclick="zoomIn()">+</button>
+                    <button class="control-btn" onclick="zoomOut()">-</button>
+                    <button class="control-btn" onclick="rotateLeft()">↺</button>
+                    <button class="control-btn" onclick="rotateRight()">↻</button>
+                </div>
+                
+                <div class="info-badges">
+                    <span class="badge" id="stationCount">Stations: 9</span>
+                    <span class="badge" id="activeCount">Active: 1</span>
+                    <span class="badge" id="statusText">Drag to pan • Scroll to zoom</span>
+                </div>
+                
+                <div class="tooltip" id="tooltip"></div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('officeCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        
+        // State
+        let width, height;
+        let rotation = 0;
+        let zoom = 0.8;
+        let offsetX = 0, offsetY = 0;
+        let isDragging = false;
+        let lastMouse = { x: 0, y: 0 };
+        let autoRotate = false;
+        let hoveredStation = null;
+        
+        // Station data
+        const stations = [
+            { id: 'default', name: 'Default', model: 'claude-opus-4.6', gateway: 'Running', room: 'Workspace', seat: 1, color: '#5b9bd5' },
+            { id: 'backend_enginer', name: 'Backend Eng', model: 'claude-haiku-4-5', gateway: 'Stopped', room: 'Workspace', seat: 2, color: '#e07b39' },
+            { id: 'business_analyst', name: 'Business Analyst', model: 'gpt-5-3', gateway: 'Stopped', room: 'Workspace', seat: 3, color: '#9f7aea' },
+            { id: 'devsecops_enginer', name: 'DevSecOps', model: 'FreeCombo', gateway: 'Stopped', room: 'Workspace', seat: 4, color: '#f59e42' },
+            { id: 'frontend_enginer', name: 'Frontend Eng', model: 'claude-haiku-4-5', gateway: 'Stopped', room: 'Workspace', seat: 5, color: '#4fb986' },
+            { id: 'project_manager', name: 'Project Manager', model: 'adacode-2.0-pro', gateway: 'Stopped', room: 'Workspace', seat: 6, color: '#f472b6' },
+            { id: 'qa_automation', name: 'QA Automation', model: 'FreeCombo', gateway: 'Stopped', room: 'Meeting', seat: 7, color: '#60a5fa' },
+            { id: 'system_analyst', name: 'System Analyst', model: 'gpt-5-3', gateway: 'Stopped', room: 'Meeting', seat: 8, color: '#a78bfa' },
+            { id: 'ui_ux_designer', name: 'UI/UX Designer', model: 'FreeCombo', gateway: 'Stopped', room: 'Lounge', seat: 9, color: '#34d399' }
+        ];
+        
+        // Resize handler
+        function resize() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            width = canvas.width;
+            height = canvas.height;
+            draw();
+        }
+        
+        window.addEventListener('resize', resize);
+        
+        // Isometric projection
+        function isoProject(x, y, z = 0) {
+            const angle = (rotation * Math.PI) / 180;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            
+            // Isometric base projection
+            const isoX = (x - y) * 0.866;
+            const isoY = (x + y) * 0.5 - z;
+            
+            // Apply rotation
+            const rotX = isoX * cos - isoY * sin;
+            const rotY = isoX * sin + isoY * cos;
+            
+            return {
+                x: rotX * zoom + width / 2 + offsetX,
+                y: rotY * zoom + height / 2 + offsetY
+            };
+        }
+        
+        // Draw a 3D box
+        function drawBox(x, y, z, w, d, h, topColor, leftColor, rightColor) {
+            const points = {
+                // Bottom face
+                bl: isoProject(x, y, z),
+                br: isoProject(x + w, y, z),
+                fl: isoProject(x, y + d, z),
+                fr: isoProject(x + w, y + d, z),
+                // Top face
+                tbl: isoProject(x, y, z + h),
+                tbr: isoProject(x + w, y, z + h),
+                tfbl: isoProject(x, y + d, z + h),
+                tfr: isoProject(x + w, y + d, z + h)
+            };
+            
+            // Draw right face
+            ctx.fillStyle = rightColor;
+            ctx.beginPath();
+            ctx.moveTo(points.bl.x, points.bl.y);
+            ctx.lineTo(points.br.x, points.br.y);
+            ctx.lineTo(points.tbr.x, points.tbr.y);
+            ctx.lineTo(points.tbl.x, points.tbl.y);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw left face
+            ctx.fillStyle = leftColor;
+            ctx.beginPath();
+            ctx.moveTo(points.bl.x, points.bl.y);
+            ctx.lineTo(points.fl.x, points.fl.y);
+            ctx.lineTo(points.tfbl.x, points.tfbl.y);
+            ctx.lineTo(points.tbl.x, points.tbl.y);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw top face
+            ctx.fillStyle = topColor;
+            ctx.beginPath();
+            ctx.moveTo(points.tbl.x, points.tbl.y);
+            ctx.lineTo(points.tbr.x, points.tbr.y);
+            ctx.lineTo(points.tfr.x, points.tfr.y);
+            ctx.lineTo(points.tfbl.x, points.tfbl.y);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Add borders
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+            
+            return points;
+        }
+        
+        // Draw floor section
+        function drawFloor(x, y, w, d, color) {
+            const p = [
+                isoProject(x, y),
+                isoProject(x + w, y),
+                isoProject(x + w, y + d),
+                isoProject(x, y + d)
+            ];
+            
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(p[0].x, p[0].y);
+            ctx.lineTo(p[1].x, p[1].y);
+            ctx.lineTo(p[2].x, p[2].y);
+            ctx.lineTo(p[3].x, p[3].y);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+        
+        // Draw desk
+        function drawDesk(x, y, z, color = '#8B7355') {
+            const deskH = 15;
+            const deskW = 40;
+            const deskD = 25;
+            
+            drawBox(x, y, z, deskW, deskD, deskH, 
+                shadeColor(color, 20), 
+                shadeColor(color, -20), 
+                shadeColor(color, -40));
+            
+            // Monitor
+            drawBox(x + 10, y + 5, z + deskH, 20, 2, 18,
+                '#1a202c', '#0f172a', '#0f172a');
+            
+            // Screen glow
+            const screenPos = isoProject(x + 15, y + 6, z + deskH + 10);
+            ctx.fillStyle = 'rgba(91, 155, 213, 0.4)';
+            ctx.fillRect(screenPos.x - 10, screenPos.y - 8, 20, 16);
+        }
+        
+        // Draw chair
+        function drawChair(x, y, z, color = '#4a5568') {
+            const chairH = 12;
+            const chairW = 12;
+            const chairD = 12;
+            
+            drawBox(x, y, z, chairW, chairD, chairH,
+                shadeColor(color, 10),
+                shadeColor(color, -10),
+                shadeColor(color, -20));
+        }
+        
+        // Draw plant
+        function drawPlant(x, y, z) {
+            // Pot
+            drawBox(x - 5, y - 5, z, 10, 10, 12,
+                '#6b5230', '#4a3720', '#3d2f1c');
+            
+            // Leaves
+            const leafColors = ['#4f9c7a', '#3d7a5f', '#5aaa8a'];
+            for (let i = 0; i < 3; i++) {
+                const offset = (i - 1) * 6;
+                const pos = isoProject(x + offset, y, z + 12);
+                ctx.fillStyle = leafColors[i];
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Draw wall
+        function drawWall(x, y, z, w, h, d, color = '#d4c4a8') {
+            drawBox(x, y, z, w, d, h,
+                color,
+                shadeColor(color, -30),
+                shadeColor(color, -50));
+        }
+        
+        // Draw reception desk
+        function drawReception(x, y, z) {
+            drawBox(x, y, z, 60, 20, 30,
+                '#c4a77d', '#a08050', '#806040');
+            
+            // Computer
+            drawBox(x + 20, y + 5, z + 30, 12, 2, 10,
+                '#1a202c', '#0f172a', '#0f172a');
+        }
+        
+        // Draw sofa
+        function drawSofa(x, y, z, color = '#e2e8f0') {
+            drawBox(x, y, z, 50, 20, 15,
+                color,
+                shadeColor(color, -15),
+                shadeColor(color, -30));
+        }
+        
+        // Draw table
+        function drawTable(x, y, z, w = 40, d = 40) {
+            // Table top
+            drawBox(x, y, z, w, d, 5,
+                '#8B7355', '#6B5345', '#5B4335');
+            
+            // Legs
+            const legPositions = [[0, 0], [w, 0], [0, d], [w, d]];
+            legPositions.forEach(([lx, ly]) => {
+                drawBox(x + lx - 2, y + ly - 2, z - 25, 4, 4, 25,
+                    '#5a4a3a', '#4a3a2a', '#3a2a1a');
+            });
+        }
+        
+        // Shade color helper
+        function shadeColor(color, percent) {
+            const num = parseInt(color.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+            const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amt));
+            const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+            return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+        }
+        
+        // Main draw function
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            
+            // Background
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#0b0e0c');
+            gradient.addColorStop(1, '#151916');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw office layout
+            drawOffice();
+            
+            // Draw stations
+            stations.forEach((station, i) => {
+                const pos = getStationPosition(i);
+                drawStation(station, pos.x, pos.y);
+            });
+        }
+        
+        function getStationPosition(index) {
+            // Different rooms with different positions
+            const positions = {
+                'Workspace': [
+                    { x: -100, y: -80 }, { x: -40, y: -80 }, { x: 20, y: -80 },
+                    { x: -100, y: -30 }, { x: -40, y: -30 }, { x: 20, y: -30 }
+                ],
+                'Meeting': [
+                    { x: -60, y: 40 }, { x: 0, y: 40 }
+                ],
+                'Lounge': [
+                    { x: 60, y: 40 }
+                ]
+            };
+            
+            const roomPositions = positions[station.room] || positions['Workspace'];
+            const roomIndex = station.seat - 1;
+            return roomPositions[Math.min(roomIndex, roomPositions.length - 1)] || { x: 0, y: 0 };
+        }
+        
+        function drawOffice() {
+            // Floor sections
+            // Main floor
+            drawFloor(-150, -120, 300, 200, '#8B7355');
+            
+            // Workspace floor (lighter wood)
+            drawFloor(-120, -100, 120, 80, '#A0896C');
+            
+            // Reception floor (tile)
+            drawFloor(-120, 20, 80, 60, '#E8E8E8');
+            
+            // Kitchen floor
+            drawFloor(40, -100, 80, 80, '#C4B8A0');
+            
+            // Classroom floor
+            drawFloor(-120, 80, 100, 60, '#B8A890');
+            
+            // Meeting area floor
+            drawFloor(40, 60, 100, 60, '#A09080');
+            
+            // Walls
+            // Back wall
+            drawWall(-150, -120, 0, 300, 80, 2, '#E8DCC4');
+            // Left wall
+            drawWall(-150, -120, 0, 2, 200, 80, '#E8DCC4');
+            
+            // Partition walls
+            drawWall(-40, -40, 0, 2, 60, 40, '#D4C4A8');
+            drawWall(40, -100, 0, 60, 2, 40, '#D4C4A8');
+            drawWall(-120, 20, 0, 80, 2, 40, '#D4C4A8');
+            
+            // Reception desk
+            drawReception(-100, 30, 0);
+            
+            // Workspace desks
+            drawDesk(-90, -70, 0);
+            drawDesk(-30, -70, 0);
+            drawDesk(30, -70, 0);
+            drawDesk(-90, -20, 0);
+            drawDesk(-30, -20, 0);
+            drawDesk(30, -20, 0);
+            
+            // Chairs for workspace
+            drawChair(-90, -45, 0);
+            drawChair(-30, -45, 0);
+            drawChair(30, -45, 0);
+            drawChair(-90, 5, 0);
+            drawChair(-30, 5, 0);
+            drawChair(30, 5, 0);
+            
+            // Plants in workspace
+            drawPlant(-110, -95, 0);
+            drawPlant(50, -95, 0);
+            
+            // Kitchen area
+            drawTable(60, -80, 0);
+            drawTable(60, -40, 0);
+            
+            // Lounge area
+            drawSofa(60, 70, 0);
+            drawTable(20, 80, 0);
+            
+            // Classroom
+            for (let i = 0; i < 3; i++) {
+                drawTable(-100 + i * 30, 95, 0, 25, 40);
+            }
+            
+            // Meeting area
+            drawTable(70, 70, 0, 50, 50);
+            
+            // Additional plants
+            drawPlant(-130, -110, 0);
+            drawPlant(110, -110, 0);
+            drawPlant(-130, 130, 0);
+            drawPlant(110, 130, 0);
+        }
+        
+        function drawStation(station, cx, cy) {
+            const pos = isoProject(cx, cy, 0);
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(pos.x, pos.y + 5, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Body
+            const isActive = station.gateway === 'Running';
+            const bodyColor = isActive ? station.color : '#4a5568';
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.roundRect(pos.x - 10, pos.y - 25, 20, 30, 4);
+            ctx.fill();
+            
+            // Head
+            ctx.fillStyle = '#FFDAB9';
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y - 35, 10, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Status indicator
+            const statusColor = isActive ? '#4fb986' : '#5c655d';
+            ctx.fillStyle = statusColor;
+            ctx.beginPath();
+            ctx.arc(pos.x + 10, pos.y - 40, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Pulse animation for active
+            if (isActive) {
+                ctx.strokeStyle = 'rgba(79, 185, 134, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pos.x + 10, pos.y - 40, 10, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            // Name label
+            ctx.fillStyle = '#e5e1d8';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(station.name, pos.x, pos.y + 45);
+            
+            // Hover effect
+            if (hoveredStation === station) {
+                ctx.strokeStyle = '#4fb986';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y - 20, 25, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+        
+        // Mouse handlers
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouse = { x: e.clientX, y: e.clientY };
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = e.clientX - lastMouse.x;
+                const dy = e.clientY - lastMouse.y;
+                offsetX += dx;
+                offsetY += dy;
+                lastMouse = { x: e.clientX, y: e.clientY };
+                draw();
+            }
+            
+            // Check hover
+            checkHover(e);
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });
+        
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const factor = e.deltaY > 0 ? 0.9 : 1.1;
+            zoom = Math.max(0.3, Math.min(3, zoom * factor));
+            draw();
+        });
+        
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            stations.forEach(station => {
+                const pos = getStationPosition(stations.indexOf(station));
+                const canvasPos = isoProject(pos.x, pos.y, 0);
+                
+                const dx = (x - width / 2) / zoom - pos.x;
+                const dy = (y - height / 2) / zoom - pos.y;
+                
+                if (Math.abs(dx) < 25 && Math.abs(dy) < 35) {
+                    showTooltip(station, e.clientX, e.clientY);
+                }
+            });
+        });
+        
+        function checkHover(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            let found = null;
+            stations.forEach(station => {
+                const pos = getStationPosition(stations.indexOf(station));
+                const canvasPos = isoProject(pos.x, pos.y, 0);
+                
+                const dx = (x - width / 2) / zoom - pos.x;
+                const dy = (y - height / 2) / zoom - pos.y;
+                
+                if (Math.abs(dx) < 25 && Math.abs(dy) < 35) {
+                    found = station;
+                }
+            });
+            
+            if (found !== hoveredStation) {
+                hoveredStation = found;
+                canvas.style.cursor = found ? 'pointer' : 'grab';
+                draw();
+            }
+        }
+        
+        function showTooltip(station, x, y) {
+            tooltip.innerHTML = `
+                <div class="tooltip-header">
+                    <div class="tooltip-avatar" style="background: ${station.color}">
+                        ${station.name.charAt(0)}
+                    </div>
+                    <div>
+                        <div class="tooltip-name">${station.name}</div>
+                        <div class="tooltip-role">${station.model}</div>
+                    </div>
+                </div>
+                <div class="tooltip-status">
+                    <span class="status-dot" style="background: ${station.gateway === 'Running' ? '#4fb986' : '#5c655d'}"></span>
+                    <span>${station.gateway === 'Running' ? 'Active' : 'Idle'}</span>
+                    <span style="margin-left: auto; color: #6b7280;">${station.room}</span>
+                </div>
+            `;
+            
+            tooltip.style.left = (x + 15) + 'px';
+            tooltip.style.top = (y - 10) + 'px';
+            tooltip.classList.add('visible');
+        }
+        
+        // Control functions
+        function resetView() {
+            rotation = 0;
+            zoom = 0.8;
+            offsetX = 0;
+            offsetY = 0;
+            draw();
+        }
+        
+        function toggleRotation() {
+            autoRotate = !autoRotate;
+            if (autoRotate) animate();
+        }
+        
+        function zoomIn() {
+            zoom = Math.min(3, zoom * 1.2);
+            draw();
+        }
+        
+        function zoomOut() {
+            zoom = Math.max(0.3, zoom * 0.8);
+            draw();
+        }
+        
+        function rotateLeft() {
+            rotation -= 15;
+            draw();
+        }
+        
+        function rotateRight() {
+            rotation += 15;
+            draw();
+        }
+        
+        function animate() {
+            if (!autoRotate) return;
+            rotation += 0.3;
+            draw();
+            requestAnimationFrame(animate);
+        }
+        
+        // Initialize
+        resize();
+    </script>
+</body>
+</html>
