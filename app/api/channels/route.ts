@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getChannels } from '@/lib/api';
+import { getChannels } from '@/lib/api-remote';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const fresh = searchParams.get('fresh') === '1';
-  const now = fresh ? Date.now() + 8000 : Date.now();
-  
-  const data = await getChannels(now);
+export async function GET() {
+  const data = await getChannels();
   return NextResponse.json(data);
 }

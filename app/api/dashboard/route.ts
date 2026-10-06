@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getDashboard } from '@/lib/api';
+import { getDashboard } from '@/lib/api-remote';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const fresh = searchParams.get('fresh') === '1';
-  const now = fresh ? Date.now() + 8000 : Date.now();
-  
-  const data = await getDashboard(now);
+export async function GET() {
+  const data = await getDashboard();
   return NextResponse.json(data);
 }

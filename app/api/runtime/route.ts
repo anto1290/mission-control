@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSnapshot } from '@/lib/api';
+import { getRuntime } from '@/lib/api-remote';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const fresh = searchParams.get('fresh') === '1';
-  const now = fresh ? Date.now() + 8000 : Date.now();
-  
-  const data = await getSnapshot(now);
+export async function GET() {
+  const data = await getRuntime();
   return NextResponse.json(data);
 }
