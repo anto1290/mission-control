@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { getKnowledge } from '@/lib/api-remote';
 
 export async function GET() {
-  const data = await getKnowledge();
-  return NextResponse.json(data);
+  try {
+    const data = await getKnowledge();
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown' }, { status: 500 });
+  }
 }
