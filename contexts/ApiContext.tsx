@@ -29,17 +29,20 @@ export interface DashboardData {
     total: number;
     byStatus: Record<string, number>;
     assigned: number;
+    data: Array<{ id: string; title: string; status: string; assignee: string }>;
   };
   calendar: {
     availability: string;
     total: number;
     active: number;
     paused: number;
+    data: any[];
   };
   activity: {
     availability: string;
     total: number;
     latest?: { title: string; preview: string; lastActive: string; id: string };
+    data: Array<{ id: string; title: string | null; preview: string; lastActive: string; isActive: boolean }>;
   };
   knowledge: {
     availability: string;
@@ -50,6 +53,7 @@ export interface DashboardData {
     availability: string;
     total: number;
     connected: number;
+    data: Array<{ name: string; status: string }>;
   };
   office: {
     declared: number;
@@ -99,8 +103,35 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       const runtimeData = await runtimeRes.json();
       const dashboardData = await dashboardRes.json();
       
+      // Transform API response to expected shape
+      const transformedDashboard: DashboardData = {
+        ...dashboardData,
+        tasks: {
+          ...dashboardData.tasks,
+          total: dashboardData.tasks.tasks?.data?.length || 0,
+          data: dashboardData.tasks.tasks?.data || []
+        },
+        calendar: {
+          ...dashboardData.calendar,
+          total: dashboardData.calendar.jobs?.data?.length || 0,
+          data: dashboardData.calendar.jobs?.data || []
+        },
+        activity: {
+          ...dashboardData.activity,
+          total: dashboardData.activity.sessions?.data?.length || 0,
+          latest: dashboardData.activity.sessions?.data?.[0],
+          data: dashboardData.activity.sessions?.data || []
+        },
+        channels: {
+          ...dashboardData.channels,
+          total: dashboardData.channels.channels?.data?.length || 0,
+          connected: dashboardData.channels.channels?.data?.filter((c: any) => c.status === 'Connected').length || 0,
+          data: dashboardData.channels.channels?.data || []
+        }
+      };
+      
       setRuntime(runtimeData);
-      setDashboard(dashboardData);
+      setDashboard(transformedDashboard);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {

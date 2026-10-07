@@ -21,6 +21,7 @@ export interface OfficeFrame {
   offsetY: number;
   hovered: Station | null;
   selected: Station | null;
+  stations: Station[];
 }
 
 // ------------------------------------------------------------------
@@ -300,59 +301,280 @@ function solidWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 // ------------------------------------------------------------------
+// Avatar generation — procedural, deterministic per agent name
+// ------------------------------------------------------------------
+
+type HairStyle = 'short' | 'wavy' | 'spiky' | 'curly' | 'bald';
+type Accessory = 'none' | 'glasses' | 'cap' | 'headphones';
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (const c of s) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
+  return Math.abs(h);
+}
+
+function pickHair(name: string): HairStyle {
+  const styles: HairStyle[] = ['short', 'wavy', 'spiky', 'curly', 'bald'];
+  return styles[hashStr(name) % styles.length];
+}
+
+function pickAccessory(name: string): Accessory {
+  const opts: Accessory[] = ['none', 'none', 'glasses', 'cap', 'headphones'];
+  return opts[hashStr(name + 'acc') % opts.length];
+}
+
+const skinTones = ['#fdebd0', '#f5cba7', '#e8b88a', '#d4915a', '#a0674b', '#6d4c41'];
+const hairColors = ['#2c2c2c', '#4a3728', '#8b6914', '#c0392b', '#f5f5dc', '#7d3c98', '#e67e22'];
+
+function drawHair(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  style: HairStyle,
+  color: string,
+  r: number,
+) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  switch (style) {
+    case 'short':
+      ctx.arc(x, y - r * 0.3, r * 0.95, Math.PI, 0);
+      ctx.fill();
+      break;
+    case 'wavy':
+      for (let i = -3; i <= 3; i++) {
+        ctx.arc(x + i * r * 0.25, y - r * 0.5, r * 0.35, Math.PI, 0);
+      }
+      ctx.fill();
+      break;
+    case 'spiky':
+      for (let i = -3; i <= 3; i++) {
+        const angle = (i / 3) * Math.PI * 0.5 - Math.PI * 0.5;
+        const sx = x + Math.sin(angle) * r * 0.7;
+        const sy = y - r * 0.3 - Math.cos(angle) * r * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(sx - r * 0.15, sy + r * 0.2);
+        ctx.lineTo(sx, sy - r * 0.3);
+        ctx.lineTo(sx + r * 0.15, sy + r * 0.2);
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(x, y - r * 0.2, r * 0.7, Math.PI, 0);
+      ctx.fill();
+      break;
+    case 'curly':
+      for (let row = 0; row < 3; row++) {
+        for (let col = -2; col <= 2; col++) {
+          ctx.beginPath();
+          ctx.arc(
+            x + col * r * 0.3,
+            y - r * 0.2 - row * r * 0.25,
+            r * 0.22,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
+      }
+      break;
+    case 'bald':
+      // nothing
+      break;
+  }
+}
+
+function drawFace(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  skinColor: string,
+  hairColor: string,
+  hairStyle: HairStyle,
+  accessory: Accessory,
+  active: boolean,
+) {
+  const r = 10;
+
+  // Ears
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.ellipse(x - r, y - 2, 3, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + r, y - 2, 3, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Face
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 1.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hair
+  drawHair(ctx, x, y, hairStyle, hairColor, r);
+
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.ellipse(x - 4, y - 2, 3, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + 4, y - 2, 3, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pupils (look slightly up if active)
+  const pupilY = active ? -1 : 0;
+  ctx.fillStyle = '#2c3e50';
+  ctx.beginPath();
+  ctx.arc(x - 4, y - 2 + pupilY, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 4, y - 2 + pupilY, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mouth
+  ctx.strokeStyle = active ? '#c0392b' : '#7f8c8d';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (active) {
+    // Smile
+    ctx.arc(x, y + 4, 3, 0.2, Math.PI - 0.2);
+  } else {
+    // Neutral
+    ctx.moveTo(x - 3, y + 5);
+    ctx.lineTo(x + 3, y + 5);
+  }
+  ctx.stroke();
+
+  // Accessory
+  if (accessory === 'glasses') {
+    ctx.strokeStyle = '#2c3e50';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x - 4, y - 2, 4.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + 4, y - 2, 4.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 0.5, y - 2);
+    ctx.lineTo(x + 0.5, y - 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 8.5, y - 2);
+    ctx.lineTo(x - 11, y - 3);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 8.5, y - 2);
+    ctx.lineTo(x + 11, y - 3);
+    ctx.stroke();
+  } else if (accessory === 'cap') {
+    ctx.fillStyle = '#3498db';
+    ctx.beginPath();
+    ctx.arc(x, y - r * 0.6, r * 0.95, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(x - r * 1.1, y - r * 0.6, r * 2.2, 4);
+  } else if (accessory === 'headphones') {
+    ctx.strokeStyle = '#2c3e50';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(x, y - 2, r * 1.2, Math.PI * 0.8, Math.PI * 0.2, true);
+    ctx.stroke();
+    ctx.fillStyle = '#2c3e50';
+    ctx.beginPath();
+    ctx.ellipse(x - r * 1.1, y - 1, 3, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + r * 1.1, y - 1, 3, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Status glow ring
+  if (active) {
+    ctx.strokeStyle = 'rgba(16,185,129,0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawBody(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  active: boolean,
+  isDesk: boolean,
+) {
+  // Torso
+  ctx.fillStyle = active ? color : '#7f8c8d';
+  ctx.beginPath();
+  ctx.roundRect(x - 8, y + 8, 16, 16, 4);
+  ctx.fill();
+
+  // Shoulders
+  if (isDesk && active) {
+    // Arms on desk posture
+    ctx.fillStyle = active ? color : '#7f8c8d';
+    ctx.beginPath();
+    ctx.roundRect(x - 10, y + 10, 4, 10, 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(x + 6, y + 10, 4, 10, 2);
+    ctx.fill();
+  }
+}
+
+// ------------------------------------------------------------------
 // Agent
 // ------------------------------------------------------------------
 
 function agent(ctx: CanvasRenderingContext2D, s: Station, index: number, frame: OfficeFrame, cw: number, ch: number) {
   const p = seatFor(s, index);
-  const c = iso(p.x, p.y, 0, frame, cw, ch);
+  const base = iso(p.x, p.y, 0, frame, cw, ch);
   const active = s.status === 'Running';
+  const isDesk = ['meeting', 'open'].includes(s.room);
+  const isLounge = ['lounge', 'relax'].includes(s.room);
 
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
   ctx.beginPath();
-  ctx.ellipse(c.x, c.y + 8, 14, 7, 0, 0, Math.PI * 2);
+  ctx.ellipse(base.x, base.y + 6, 12, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // body (torso)
-  ctx.fillStyle = active ? s.color : '#9ca3af';
-  ctx.beginPath();
-  ctx.roundRect(c.x - 9, c.y - 18, 18, 24, 5);
-  ctx.fill();
+  // Body
+  drawBody(ctx, base.x, base.y, s.color, active, isDesk);
 
-  // head
-  ctx.fillStyle = '#fcd9b8';
-  ctx.beginPath();
-  ctx.arc(c.x, c.y - 26, 8, 0, Math.PI * 2);
-  ctx.fill();
+  // Face
+  const skinIdx = hashStr(s.name) % skinTones.length;
+  const hairIdx = hashStr(s.name + 'hair') % hairColors.length;
+  const hairStyle = pickHair(s.name);
+  const accessory = pickAccessory(s.name);
 
-  // avatar ring placeholder — when avatars are provided they get drawn here
-  if (frame.hovered === s || frame.selected === s) {
-    ctx.strokeStyle = active ? '#10b981' : '#f59e0b';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y - 26, 12, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  drawFace(
+    ctx,
+    base.x,
+    base.y - 8,
+    skinTones[skinIdx],
+    hairColors[hairIdx],
+    hairStyle,
+    accessory,
+    active,
+  );
 
-  // status dot
-  ctx.fillStyle = active ? '#10b981' : '#d1d5db';
-  ctx.beginPath();
-  ctx.arc(c.x + 8, c.y - 30, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  if (active) {
-    ctx.strokeStyle = 'rgba(16,185,129,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(c.x + 8, c.y - 30, 7, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // label
-  ctx.fillStyle = '#374151';
-  ctx.font = '600 9px system-ui, sans-serif';
+  // Label below
+  ctx.fillStyle = active ? '#374151' : '#9ca3af';
+  ctx.font = '600 8px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(s.name, c.x, c.y + 22);
+  ctx.fillText(s.name, base.x, base.y + 18);
+
+  // Room tag for lounge/relax
+  if (isLounge) {
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '700 7px system-ui, sans-serif';
+    ctx.fillText('🛋️', base.x, base.y + 27);
+  }
 }
 
 // ------------------------------------------------------------------
@@ -530,7 +752,7 @@ export function renderOffice(
   // ----------------------------------------------------------------
   // Stations (agents)
   // ----------------------------------------------------------------
-  stations.forEach((s) => agent(ctx, s, frame, 0, 0));
+  stations.forEach((s, index) => agent(ctx, s, index, frame, 0, 0));
 
   ctx.restore();
 }
