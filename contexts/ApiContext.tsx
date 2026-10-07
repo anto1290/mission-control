@@ -103,35 +103,18 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       const runtimeData = await runtimeRes.json();
       const dashboardData = await dashboardRes.json();
       
-      // Transform API response to expected shape
-      const transformedDashboard: DashboardData = {
+      // Flatten nested structure: API returns {tasks: {tasks: {...}}} -> {tasks: {...}}
+      const flattened: DashboardData = {
         ...dashboardData,
-        tasks: {
-          ...dashboardData.tasks,
-          total: dashboardData.tasks.tasks?.data?.length || 0,
-          data: dashboardData.tasks.tasks?.data || []
-        },
-        calendar: {
-          ...dashboardData.calendar,
-          total: dashboardData.calendar.jobs?.data?.length || 0,
-          data: dashboardData.calendar.jobs?.data || []
-        },
-        activity: {
-          ...dashboardData.activity,
-          total: dashboardData.activity.sessions?.data?.length || 0,
-          latest: dashboardData.activity.sessions?.data?.[0],
-          data: dashboardData.activity.sessions?.data || []
-        },
-        channels: {
-          ...dashboardData.channels,
-          total: dashboardData.channels.channels?.data?.length || 0,
-          connected: dashboardData.channels.channels?.data?.filter((c: any) => c.status === 'Connected').length || 0,
-          data: dashboardData.channels.channels?.data || []
-        }
+        tasks: dashboardData.tasks?.tasks || dashboardData.tasks || { availability: 'unavailable', total: 0, data: [] },
+        calendar: dashboardData.calendar?.calendar || dashboardData.calendar || { availability: 'unavailable', total: 0, data: [] },
+        activity: dashboardData.activity?.activity || dashboardData.activity || { availability: 'unavailable', total: 0, data: [] },
+        knowledge: dashboardData.knowledge?.skills || dashboardData.knowledge || { availability: 'unavailable', total: 0, data: [] },
+        channels: dashboardData.channels?.channels || dashboardData.channels || { availability: 'unavailable', total: 0, data: [] }
       };
       
       setRuntime(runtimeData);
-      setDashboard(transformedDashboard);
+      setDashboard(flattened);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {

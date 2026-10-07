@@ -51,6 +51,7 @@ export default function OfficePage() {
         offsetY: offset.y,
         hovered: hoveredStation,
         selected: selectedStation,
+        stations,
       },
     );
   }, [stations, rotation, zoom, offset, hoveredStation, selectedStation]);

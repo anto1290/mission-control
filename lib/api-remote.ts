@@ -5,17 +5,14 @@
  * Base URL: https://iyxfrf42-hermes.adacode.ai
  */
 
-// Configuration from environment
 const HERMES_API_URL = process.env.NEXT_PUBLIC_HERMES_API_URL || 'https://iyxfrf42-hermes.adacode.ai';
 const HERMES_TOKEN = process.env.NEXT_PUBLIC_AUTH_TOKEN || '';
 
-// Headers for API requests
 const authHeaders = HERMES_TOKEN ? {
   'Authorization': `Bearer ${HERMES_TOKEN}`,
   'Content-Type': 'application/json'
 } : {};
 
-// GET /api/runtime
 export async function getRuntime() {
   const response = await fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders });
   const data = await response.json();
@@ -36,11 +33,9 @@ export async function getRuntime() {
   };
 }
 
-// GET /api/tasks
 export async function getTasks() {
   const response = await fetch(`${HERMES_API_URL}/api/plugins/kanban/board`, { headers: authHeaders });
   const data = await response.json();
-  
   const tasks = data.columns?.flatMap((col: any) => col.tasks || []) || [];
   
   return {
@@ -51,48 +46,57 @@ export async function getTasks() {
         title: t.title,
         status: t.status,
         assignee: t.assignee
-      }))
+      })),
+      total: tasks.length
     },
     fetchedAt: new Date().toISOString()
   };
 }
 
-// GET /api/calendar
 export async function getCalendar() {
   const response = await fetch(`${HERMES_API_URL}/api/cron/jobs`, { headers: authHeaders });
   const jobs = await response.json();
+  const jobList = Array.isArray(jobs) ? jobs : [];
   
   return {
-    jobs: {
+    calendar: {
       availability: 'available',
-      data: jobs
+      data: jobList,
+      total: jobList.length
     },
     fetchedAt: new Date().toISOString()
   };
 }
 
-// GET /api/activity
 export async function getActivity() {
   const response = await fetch(`${HERMES_API_URL}/api/sessions?limit=20`, { headers: authHeaders });
   const data = await response.json();
   const sessions = data.sessions || [];
+  const sessionList = Array.isArray(sessions) ? sessions : [];
   
   return {
-    sessions: {
+    activity: {
       availability: 'available',
-      data: sessions.map((s: any) => ({
+      data: sessionList.map((s: any) => ({
         id: s.id,
         title: s.title,
         preview: s.preview,
-        lastActive: new Date(s.last_active * 1000).toLocaleString(),
+        lastActive: s.last_active ? new Date(s.last_active * 1000).toLocaleString() : '',
         isActive: s.is_active
-      }))
+      })),
+      total: sessionList.length,
+      latest: sessionList[0] ? {
+        id: sessionList[0].id,
+        title: sessionList[0].title,
+        preview: sessionList[0].preview,
+        lastActive: sessionList[0].last_active ? new Date(sessionList[0].last_active * 1000).toLocaleString() : '',
+        isActive: sessionList[0].is_active
+      } : undefined
     },
     fetchedAt: new Date().toISOString()
   };
 }
 
-// GET /api/knowledge
 export async function getKnowledge() {
   const response = await fetch(`${HERMES_API_URL}/api/skills`, { headers: authHeaders });
   const skills = await response.json();
@@ -105,13 +109,13 @@ export async function getKnowledge() {
         category: s.category || 'unknown',
         enabled: s.enabled,
         usage: s.usage
-      })) : []
+      })) : [],
+      total: Array.isArray(skills) ? skills.length : 0
     },
     fetchedAt: new Date().toISOString()
   };
 }
 
-// GET /api/channels
 export async function getChannels() {
   const response = await fetch(`${HERMES_API_URL}/api/status`, { headers: authHeaders });
   const data = await response.json();
@@ -121,25 +125,28 @@ export async function getChannels() {
     status: info.state === 'connected' ? 'Connected' : 'Disconnected'
   }));
   
+  const connected = channels.filter((c: any) => c.status === 'Connected').length;
+  
   return {
     channels: {
       availability: 'available',
-      data: channels
+      data: channels,
+      total: channels.length,
+      connected
     },
     activeSessions: data.active_sessions || 0,
     fetchedAt: new Date().toISOString()
   };
 }
 
-// GET /api/office
 export async function getOffice() {
   try {
     const response = await fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
+
     const data = await response.json();
     const profiles = data.profiles || data;
-    
+
     const stations = (Array.isArray(profiles) ? profiles : []).map((profile: any, index: number) => ({
       id: profile.name,
       name: profile.name,
@@ -150,24 +157,36 @@ export async function getOffice() {
       color: ['#5b9bd5', '#4fb986', '#e07b39', '#9f7aea', '#f59e42', '#f472b6', '#60a5fa', '#a78bfa', '#34d399'][index] || '#5b9bd5',
       freshness: new Date().toISOString()
     }));
-    
-    const summary = {
-      declared: stations.length,
-      active: stations.filter(s => s.state === 'Working').length,
-      offline: stations.filter(s => s.state === 'Offline').length
+
+    const active = stations.filter(s => s.state === 'Working').length;
+    const offline = stations.filter(s => s.state === 'Offline').length;
+
+    return {
+      office: {
+        availability: 'available',
+        declared: stations.length,
+        active: active,
+        idle: 0,
+        offline: offline,
+        data: stations
+      },
+      fetchedAt: new Date().toISOString()
     };
-    
-    return { stations, summary, fetchedAt: new Date().toISOString() };
   } catch (error) {
     return {
-      stations: [],
-      summary: { declared: 0, active: 0, offline: 0 },
+      office: {
+        availability: 'error',
+        declared: 0,
+        active: 0,
+        idle: 0,
+        offline: 0,
+        data: []
+      },
       fetchedAt: new Date().toISOString()
     };
   }
 }
 
-// GET /api/dashboard
 export async function getDashboard() {
   const [runtime, tasks, calendar, activity, knowledge, channels, office] = await Promise.all([
     getRuntime(),
