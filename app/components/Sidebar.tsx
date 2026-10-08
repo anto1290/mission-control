@@ -1,1 +1,1 @@
-export { default } from '@/components/Sidebar';
+export { default } from '@/app/components/Sidebar';

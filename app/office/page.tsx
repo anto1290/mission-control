@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Office3D from '@/app/components/Office3D';
 
 interface Station {
   id: string;
@@ -20,9 +21,9 @@ export default function OfficePage() {
     fetch('/api/office')
       .then((r) => r.json())
       .then((data: any) => {
-        if (Array.isArray(data.stations)) {
+        if (Array.isArray(data.office?.data)) {
           setStations(
-            data.stations.map((s: any, i: number) => ({
+            data.office.data.map((s: any, i: number) => ({
               id: s.id || s.name || `station-${i}`,
               name: s.name,
               model: s.model || 'Unknown',
@@ -54,62 +55,44 @@ export default function OfficePage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5 h-full flex flex-col">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-white">Office 3D</h1>
+          <h1 className="text-2xl font-bold text-white">Virtual Office</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Interactive 3D office with agent stations
+            Interactive 3D workspace for your AI agents
           </p>
         </div>
-        <div className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm">
-          {stations.length} Agents · {activeCount} Active
+        <div className="flex gap-3">
+          <div className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-sm">
+            {stations.length} Agents
+          </div>
+          <div className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm">
+            {activeCount} Active
+          </div>
         </div>
       </div>
 
-      <div className="rounded-xl overflow-hidden border border-slate-700" style={{ height: '600px' }}>
-        {/* Sketchfab 3D Model Embed */}
-        <iframe
-          src="https://sketchfab.com/models/ea1d5422c80141aa8ec2478cc359fe41/embed?autostart=1&ui_infos=0&ui_watermark=0&ui_watermark_link=0"
-          className="w-full h-full"
-          style={{ border: 'none' }}
-          allow="autoplay; fullscreen;vr"
-          title="Office 3D Model"
+      <div className="flex-1 rounded-xl overflow-hidden border border-slate-700 min-h-[500px]">
+        <Office3D 
+          agents={stations}
+          onAgentClick={(agent) => console.log('Clicked:', agent.name)}
         />
+      </div>
 
-        {/* Agent Stations Overlay */}
-        <div className="absolute bottom-4 left-4 right-4 flex gap-2 overflow-x-auto">
-          {stations.map((station) => (
-            <div
-              key={station.id}
-              className="flex-shrink-0 bg-slate-900/90 backdrop-blur rounded-lg p-3 min-w-[140px] border border-slate-700"
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: station.color }}
-                >
-                  {station.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-white text-xs font-medium truncate">{station.name}</p>
-                  <p className="text-slate-400 text-[10px] truncate">{station.room}</p>
-                </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between">
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    station.status === 'Running'
-                      ? 'bg-emerald-500/20 text-emerald-400'
-                      : 'bg-slate-600/40 text-slate-400'
-                  }`}
-                >
-                  {station.status}
-                </span>
-                <span className="text-[10px] text-slate-500">Seat {station.seat}</span>
-              </div>
-            </div>
-          ))}
+      {/* Legend */}
+      <div className="flex gap-6 text-sm flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <span className="text-slate-400">Active Agent</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-slate-500"></div>
+          <span className="text-slate-400">Offline Agent</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+          <span className="text-slate-400">Click to select</span>
         </div>
       </div>
     </div>
