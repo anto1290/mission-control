@@ -37,9 +37,12 @@ export default function Header() {
     <header className="glass border-b border-dark-800 px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-white hidden sm:block">
-            Mission Control
-          </h2>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              QLXion
+            </span>
+            <span className="text-sm text-dark-400 hidden sm:block">| Mission Control</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-4">

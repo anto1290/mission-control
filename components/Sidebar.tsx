@@ -56,13 +56,9 @@ export default function Sidebar() {
           {/* Logo */}
           <div className="p-6 border-b border-dark-800">
             <Link href="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-blue-500 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">M</span>
-              </div>
-              <div>
-                <h1 className="font-bold text-white">Mission Control</h1>
-                <p className="text-xs text-dark-400">Hermes AI Team</p>
-              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                QLXion
+              </span>
             </Link>
           </div>
 
