@@ -1,12 +1,16 @@
 /**
  * Mission Control API Routes
- * 
- * Uses remote Hermes API with Bearer token authentication
- * Base URL: https://iyxfrf42-hermes.adacode.ai
+ *
+ * Dual-mode: local Hermes CLI or remote API
+ * - Local: Uses Hermes CLI directly (no auth needed)
+ * - Remote: Uses Bearer token auth via HERMES_API_URL
  */
 
 const HERMES_API_URL = process.env.NEXT_PUBLIC_HERMES_API_URL || 'https://iyxfrf42-hermes.adacode.ai';
 const HERMES_TOKEN = process.env.NEXT_PUBLIC_AUTH_TOKEN || '';
+
+// Check if we should use remote API
+const USE_REMOTE = !!HERMES_TOKEN && !!HERMES_API_URL;
 
 const authHeaders = HERMES_TOKEN ? {
   'Authorization': `Bearer ${HERMES_TOKEN}`,
