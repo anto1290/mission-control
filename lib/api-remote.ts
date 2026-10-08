@@ -197,15 +197,15 @@ export async function getDashboard() {
     getChannels(),
     getOffice()
   ]);
-  
+
   return {
-    runtime,
-    tasks,
-    calendar,
-    activity,
-    knowledge,
-    channels,
-    office,
+    runtime: runtime.profiles,
+    tasks: tasks.tasks,
+    calendar: calendar.calendar,
+    activity: activity.activity,
+    knowledge: knowledge.skills,
+    channels: channels.channels,
+    office: office.office,
     fetchedAt: new Date().toISOString()
   };
 }
