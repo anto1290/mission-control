@@ -10,7 +10,6 @@ interface AgentStation {
   status: 'Running' | 'Stopped';
   seat: number;
   color: string;
-  position: { x: number; z: number };
 }
 
 interface Props {
