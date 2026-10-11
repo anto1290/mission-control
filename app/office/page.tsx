@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import Office3D from '@/app/components/Office3D';
 import { useApi } from '@/contexts/ApiContext';
-import { Clock, Activity, User, Calendar, MessageSquare } from 'lucide-react';
+import { Clock, Activity, User, MessageSquare } from 'lucide-react';
 
 interface Station {
   id: string;
@@ -15,6 +15,8 @@ interface Station {
   color: string;
   task?: string;
   taskStatus?: string;
+  reason?: 'task' | 'scheduled' | 'idle' | string;
+  scheduledJob?: string;
 }
 
 interface ActivityEvent {
@@ -31,9 +33,6 @@ export default function OfficePage() {
   const [selectedAgent, setSelectedAgent] = useState<Station | null>(null);
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Station | null>(null);
-  const [activity, setActivity] = useState<ActivitySession[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;

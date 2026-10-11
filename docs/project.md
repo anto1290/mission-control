@@ -182,6 +182,22 @@ Do not embed a static image in place of an animated character.
 
 Do not claim that a character is fully animated if its model has no usable animation clips.
 
+### Selected asset
+
+**Soldier.glb** (CC0) — `https://threejs.org/examples/models/gltf/Soldier.glb` (~4 MB).
+
+Mixamo-derived humanoid with 6 baked clips:
+
+| Index | Clip   | Usage           |
+|-------|--------|-----------------|
+| 0     | Idle   | idle / meeting* |
+| 1     | Run    | (unused)        |
+| 2     | TPose  | (unused)        |
+| 3     | Walk   | walking         |
+
+\* No "meeting" or "sit" clip exists; `meeting` state reuses the idle clip.
+Procedural rig remains as fallback when the GLB fails to load (CORS/offline).
+
 ## 6. EMPLOYEE ANIMATION SYSTEM
 
 Implement a reusable character animation controller.
@@ -674,8 +690,8 @@ Provide:
 - **Commands/tests executed:** `tsc --noEmit` clean; `node test-pathfinding.ts` PASS; production `next build` clean; live scene inspected in browser (10 agents rendered, cross-room paths observed, no console errors).
 
 - **Known limitations / next steps:**
-  1. ~~**Character rig (Phase C) — done this round:** replaced flat primitive figures with a procedurally-jointed humanoid (hip/shoulder pivots) + per-frame articulated animation. GLB/SkinnedMesh/AnimationMixer still outstanding.~~ ✅ Done — GLB (RobotExpressv2, CC0) + AnimationMixer wired; procedural rig as fallback.
-  2. ~~Select a rigged GLB character asset + compatible clips, wire into `Office3D.tsx` to fully close §5/§6.~~ ✅ Done — RobotExpressv2.glb loaded via GLTFLoader; idle/walk/meeting clips mapped to AnimationMixer.
+  1. ~~**Character rig (Phase C) — done this round:** replaced flat primitive figures with a procedurally-jointed humanoid (hip/shoulder pivots) + per-frame articulated animation. GLB/SkinnedMesh/AnimationMixer still outstanding.~~ ✅ Done — GLB (Soldier.glb, CC0 humanoid) + AnimationMixer wired; procedural rig as fallback.
+  2. ~~Select a rigged GLB character asset + compatible clips, wire into `Office3D.tsx` to fully close §5/§6.~~ ✅ Done — Soldier.glb loaded via GLTFLoader; idle/walk clips mapped to AnimationMixer; meeting reuses idle (no sit/typing clip in asset).
   3. ~~Add an employee detail panel and activity timeline (§11).~~ ✅ Done — `page.tsx` now renders a `selected` agent side-panel (model, status, reason badge, task, scheduled job, recent sessions from `/api/activity`).
   4. ~~Drive room placement from real agent events/calendar rather than a time slot (§10).~~ ✅ Done — `getOffice()` uses active tasks, cron `nextRun`, offline status, and a deterministic per-agent+hour hash.
   5. ~~Delete dead `lib/office-renderer.ts` (one-line removal; confirmed unreferenced).~~ ✅ Done.
