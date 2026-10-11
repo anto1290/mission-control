@@ -145,11 +145,16 @@ export async function getChannels() {
 
 export async function getOffice() {
   try {
-    // Fetch profiles + task board in parallel; tasks are joined onto each
-    // agent by assignee so the office UI can show a real in-progress task.
-    const [profilesRes, tasksData] = await Promise.all([
+    // Fetch profiles + task board + cron jobs in parallel. Tasks are joined
+    // onto each agent by assignee so the office UI can show a real
+    // in-progress task. Cron jobs feed the event-driven room resolver:
+    // agents with no active task are pinned to a Meeting seat when a job
+    // is due within 15 min, otherwise they fall back to a deterministic
+    // per-agent hash (no global time-slot rotation).
+    const [profilesRes, tasksData, calendarData] = await Promise.all([
       fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders }),
       getTasks().catch(() => null),
+      getCalendar().catch(() => null),
     ]);
     if (!profilesRes.ok) throw new Error(`HTTP ${profilesRes.status}`);
 
@@ -164,27 +169,54 @@ export async function getOffice() {
       if (!activeTaskByAssignee.has(t.assignee)) activeTaskByAssignee.set(t.assignee, t);
     }
 
+    // Cron jobs with a nextRun within 15 min drive "scheduled" meetings.
+    const jobs: any[] = calendarData?.calendar?.data || [];
+    const nowMs = Date.now();
+    const upcomingJob = jobs
+      .filter((j: any) => {
+        const nr = j.nextRun ? new Date(j.nextRun).getTime() : 0;
+        return nr >= nowMs && nr <= nowMs + 15 * 60_000;
+      })
+      .sort((a: any, b: any) => new Date(a.nextRun).getTime() - new Date(b.nextRun).getTime())[0];
+
     const seats = ['#5b9bd5', '#4fb986', '#e07b39', '#9f7aea', '#f59e42', '#f472b6', '#60a5fa', '#a78bfa', '#34d399'];
     const stations = list.map((profile: any, index: number) => {
       const running = !!profile.gateway_running;
       const task = activeTaskByAssignee.get(profile.name);
-      // Data-driven room: an in-flight task pins the agent to their
-      // workspace. Without a task, agents rotate through Meeting / Lounge on
-      // a 5-min window so cross-room A* paths actually fire in the live
-      // scene. `slot` changes once per 300 s → visible walking transitions.
-      const slot = Math.floor(Date.now() / 300_000);
-      const offTask = task ? undefined : (index + slot) % 5;
-      const room = offTask === 0 ? 'Meeting'
-        : offTask === 1 ? 'Lounge'
-        : 'Workspace';
+
+      let reason: 'task' | 'scheduled' | 'idle';
+      let room: string;
+      let scheduledJob: string | undefined;
+
+      if (task) {
+        reason = 'task';
+        room = 'Workspace';
+      } else if (!running) {
+        reason = 'idle';
+        room = 'Lounge';
+      } else if (upcomingJob) {
+        reason = 'scheduled';
+        room = 'Meeting';
+        scheduledJob = upcomingJob.name || upcomingJob.id;
+      } else {
+        // Deterministic fallback: stable per-agent + hour, so agents don't
+        // drift on every poll.  No global time-slot rotation.
+        const hourBucket = Math.floor(nowMs / 3_600_000);
+        const h = Math.abs((profile.name || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0) * 31, 0) + hourBucket) % 3;
+        reason = 'idle';
+        room = h === 0 ? 'Meeting' : h === 1 ? 'Lounge' : 'Workspace';
+      }
+
       return {
         id: profile.name,
         name: profile.name,
         model: profile.model,
         state: running ? 'Working' : 'Offline',
         room,
+        reason,
         task: task ? task.title : undefined,
         taskStatus: task ? task.status : undefined,
+        scheduledJob,
         seat: index + 1,
         color: seats[index] || seats[0],
         freshness: new Date().toISOString()

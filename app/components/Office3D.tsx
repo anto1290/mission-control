@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildOfficeEnvironment, type OfficeSeat } from './office/environment';
 import { createOfficePathfinder, type Pathfinder } from './office/pathfinding';
 
@@ -15,72 +16,179 @@ interface AgentStation {
   room?: string;
   task?: string;
   taskStatus?: string;
+  reason?: 'task' | 'scheduled' | 'idle' | string;
+  scheduledJob?: string;
 }
 
 interface Props {
   agents: AgentStation[];
-  onAgentClick?: (agent: AgentStation) => void;
+  onAgentClick?: (agent: AgentStation | null) => void;
+}
+
+// ─── Rigged character ────────────────────────────────────────────────────────
+// Procedural humanoid with joint pivots so walk/typing/sit can be articulated
+// rather than swivelling a single flat group. Upgraded to a rigged GLB +
+// AnimationMixer when a licensed asset is available (docs §5/§6).
+
+interface RiggedCharacter {
+  root: THREE.Group;
+  legs: THREE.Group[];   // pivots at hips
+  arms: THREE.Group[];   // pivots at shoulders
+  head: THREE.Object3D;
+  glow?: THREE.Mesh;
+  bodyMat: THREE.MeshStandardMaterial;
+}
+
+// Shared, cacheable geometry. Created lazily on first use inside the client
+// effect (via createCharacter) — never at module top level, so SSR import
+// stays clean even if the module is evaluated before the browser is ready.
+let GEO: {
+  body: THREE.BoxGeometry; head: THREE.SphereGeometry; hair: THREE.SphereGeometry;
+  leg: THREE.CylinderGeometry; arm: THREE.CylinderGeometry; ring: THREE.RingGeometry;
+} | null = null;
+function getGeo() {
+  if (!GEO) {
+    GEO = {
+      body: new THREE.BoxGeometry(0.4, 0.5, 0.25),
+      head: new THREE.SphereGeometry(0.15, 16, 16),
+      hair: new THREE.SphereGeometry(0.16, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      leg: new THREE.CylinderGeometry(0.06, 0.06, 0.4),
+      arm: new THREE.CylinderGeometry(0.05, 0.05, 0.4),
+      ring: new THREE.RingGeometry(0.2, 0.3, 32),
+    };
+  }
+  return GEO;
 }
 
 function createCharacter(color: string, active: boolean): THREE.Group {
-  const grp = new THREE.Group();
+  const g = getGeo();
+  const root = new THREE.Group();
   const skinColor = active ? 0xf4c7a8 : 0x9ca3af;
   const bodyColor = active ? new THREE.Color(color) : 0x475569;
-
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.5, 0.25),
-    new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.7 })
-  );
-  body.position.y = 0.55;
-  body.castShadow = true;
-  body.userData.isBody = true;
-  grp.add(body);
-
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.15, 16, 16),
-    new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.8 })
-  );
-  head.position.y = 0.95;
-  head.castShadow = true;
-  grp.add(head);
-
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.16, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x2c2c2c })
-  );
-  hair.position.y = 1.0;
-  grp.add(hair);
-
-  const legGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.4);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.7 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.8 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c });
   const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+
+  const attach = (parent: THREE.Object3D, mesh: THREE.Mesh, x: number, y: number, z: number, pivotX = 0, pivotY = 0, pivotZ = 0) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    mesh.position.set(pivotX, pivotY, pivotZ);
+    pivot.add(mesh);
+    parent.add(pivot);
+    return pivot;
+  };
+
+  const legs: THREE.Group[] = [];
   [-0.1, 0.1].forEach(x => {
-    const leg = new THREE.Mesh(legGeo, legMat);
-    leg.position.set(x, 0.2, 0);
+    const leg = new THREE.Mesh(g.leg, legMat);
     leg.castShadow = true;
-    grp.add(leg);
+    legs.push(attach(root, leg, x, 0.4, 0, 0, -0.2, 0));
   });
 
-  const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.4);
+  const body = new THREE.Mesh(g.body, bodyMat);
+  body.castShadow = true;
+  root.add(body);
+  body.position.y = 0.55;
+  root.userData.isBody = true;
+
+  const arms: THREE.Group[] = [];
   [-0.25, 0.25].forEach(x => {
-    const arm = new THREE.Mesh(armGeo, new THREE.MeshStandardMaterial({ color: bodyColor }));
-    arm.position.set(x, 0.55, 0);
+    const arm = new THREE.Mesh(g.arm, bodyMat.clone());
     arm.castShadow = true;
-    arm.userData.isArm = true;
-    grp.add(arm);
+    arms.push(attach(root, arm, x, 0.8, 0, 0, -0.2, 0));
   });
 
+  const head = new THREE.Mesh(g.head, skinMat);
+  head.castShadow = true;
+  root.add(head);
+  head.position.y = 0.95;
+
+  const hair = new THREE.Mesh(g.hair, hairMat);
+  root.add(hair);
+  hair.position.y = 1.0;
+
+  let glow: THREE.Mesh | undefined;
   if (active) {
-    const glow = new THREE.Mesh(
-      new THREE.RingGeometry(0.2, 0.3, 32),
+    glow = new THREE.Mesh(
+      g.ring,
       new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
     );
     glow.position.y = 0.05;
     glow.rotation.x = -Math.PI / 2;
-    glow.userData.isGlow = true;
-    grp.add(glow);
+    root.add(glow);
+    root.userData.isGlow = true;
   }
 
-  return grp;
+  // Expose the rig through userData so the per-frame animator can reach it
+  // without a separate registry (keeps the existing per-character lookup).
+  root.userData.rig = { root, legs, arms, head, glow, bodyMat };
+  return root;
+}
+
+function rigOf(char: THREE.Group): RiggedCharacter | undefined {
+  return char.userData.rig as RiggedCharacter | undefined;
+}
+
+// ─── GLB rigged character (docs §5/§6) ───────────────────────────────────────
+// ponytail: procedural rig is the fallback; GLB upgrades animation quality
+// when a compatible asset is available. RobotExpressv2.glb is a CC0 asset
+// from the three.js examples repo with Idle/Run/Dance clips.
+const GLB_URL = 'https://threejs.org/examples/models/gltf/RobotExpressv2/RobotExpressv2.glb';
+
+interface GlbState {
+  loaded: boolean;
+  gltfScene: THREE.Group | null;
+  clips: { idle?: THREE.AnimationClip; walk?: THREE.AnimationClip; meeting?: THREE.AnimationClip };
+}
+const glbState: GlbState = { loaded: false, gltfScene: null, clips: {} };
+
+async function loadGlbCharacter(): Promise<boolean> {
+  try {
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync(GLB_URL);
+    const clips = gltf.animations;
+    if (clips.length === 0) return false;
+    gltfScene = gltf.scene;
+    clips.forEach((c, i) => {
+      const name = c.name.toLowerCase();
+      if (name.includes('idle') || name === 'robot express') glbState.clips.idle = c;
+      else if (name.includes('run') || name.includes('walk') || i === 1) glbState.clips.walk = c;
+      else glbState.clips.meeting = c;
+    });
+    if (!glbState.clips.idle && clips[0]) glbState.clips.idle = clips[0];
+    if (!glbState.clips.walk && clips[1]) glbState.clips.walk = clips[1];
+    glbState.loaded = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let gltfScene: THREE.Group | null = null;
+
+function createGlbCharacter(color: string, active: boolean): { group: THREE.Group; mixer: THREE.AnimationMixer; isGlb: boolean } {
+  if (glbState.loaded && glbState.gltfScene) {
+    const group = new THREE.Group();
+    const mesh = glbState.gltfScene.clone(true);
+    // Tint the GLB to match the agent color
+    mesh.traverse(obj => {
+      if (obj instanceof THREE.Mesh) {
+        const mat = (obj.material as THREE.Material).clone();
+        if (mat instanceof THREE.MeshStandardMaterial) {
+          mat.color.multiply(new THREE.Color(color));
+        }
+        obj.material = mat;
+      }
+    });
+    group.add(mesh);
+    const mixer = new THREE.AnimationMixer(group);
+    return { group, mixer, isGlb: true };
+  }
+  // Fallback: procedural rig
+  const group = createCharacter(color, active);
+  const mixer = new THREE.AnimationMixer(group);
+  return { group, mixer, isGlb: false };
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -96,13 +204,22 @@ export default function Office3D({ agents, onAgentClick }: Props) {
   const orbitRef = useRef({ theta: Math.PI / 4, phi: Math.PI / 3.2, radius: 35, target: new THREE.Vector3(0, 0, 0) });
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const characterMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
+  const mixersRef = useRef<Map<string, THREE.AnimationMixer>>(new Map());
+  const mixerExistingActions = useRef<Map<string, THREE.AnimationAction>>(new Map());
+  const focusedAgentRef = useRef<string | null>(null);
   const behaviorRef = useRef<Map<string, { state: string; startTime: number; duration: number }>>(new Map());
   const walkPathRef = useRef<Map<string, { pts: THREE.Vector3[]; i: number }>>(new Map());
   const lastSigRef = useRef<Map<string, string>>(new Map());
+  const walkPhaseRef = useRef<Map<string, number>>(new Map());
   const pathfinderRef = useRef<Pathfinder | null>(null);
   const seatsRef = useRef<OfficeSeat[]>([]);
 
   agentsRef.current = agents;
+
+  // Load GLB character asset once on mount (docs §5/§6).
+  // ponytail: fire-and-forget; characters are created with procedural rig
+  // until GLB is ready, then upgraded in a separate effect when agents change.
+  useEffect(() => { loadGlbCharacter(); }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -141,11 +258,15 @@ export default function Office3D({ agents, onAgentClick }: Props) {
         // Offline: sit back at their desk, no activity.
         return { state: 'idle', end: home };
       }
-      const room = (agent.room || 'Workspace').toLowerCase();
+      const room = (agent.reason === 'scheduled' || agent.room === 'meeting' || agent.room?.toLowerCase() === 'meeting')
+        ? 'meeting'
+        : (agent.reason === 'idle' || agent.room === 'lounge' || agent.room?.toLowerCase() === 'lounge' || agent.room?.toLowerCase() === 'coffee')
+          ? 'lounge'
+          : 'workspace';
       if (room === 'meeting') {
         return { state: 'meeting', end: env.meetingSeats[idx % env.meetingSeats.length].clone() };
       }
-      if (room === 'lounge' || room === 'coffee') {
+      if (room === 'lounge') {
         return { state: 'coffee', end: env.loungeCenter.clone() };
       }
       // Workspace (or running with no room signal): work at their desk.
@@ -176,12 +297,13 @@ export default function Office3D({ agents, onAgentClick }: Props) {
 
     agents.forEach((agent, idx) => {
       const seat = seatsRef.current[idx] || seatsRef.current[0];
-      const char = createCharacter(agent.color, agent.status === 'Running');
+      const { group: char, mixer } = createGlbCharacter(agent.color, agent.status === 'Running');
       char.position.copy(seat ? seat.chair : new THREE.Vector3(0, 0, 0));
       char.rotation.y = Math.PI;
       char.userData = { agentId: agent.id };
       scene.add(char);
       characterMeshesRef.current.set(agent.id, char);
+      mixersRef.current.set(agent.id, mixer);
       applyAgentState(agent, idx);
     });
 
@@ -225,22 +347,29 @@ export default function Office3D({ agents, onAgentClick }: Props) {
         if (walkPath && walkPath.i < walkPath.pts.length - 1) {
           // Follow the waypoint polyline: advance toward the next node at a
           // fixed speed (m/s), then the next, until the final node.
-          const step = dt * 2.2; // metres per frame
-          let remaining = step;
+          const speed = 2.2; // metres per second
+          let remaining = speed * dt;
           let cur = walkPath.pts[walkPath.i];
+          let moved = 0;
           while (remaining > 0 && walkPath.i < walkPath.pts.length - 1) {
             const next = walkPath.pts[walkPath.i + 1];
             const segLen = cur.distanceTo(next);
             if (segLen < 1e-4) { walkPath.i += 1; cur = next; continue; }
-            const along = next.clone().sub(cur).normalize().multiplyScalar(Math.min(remaining, segLen));
-            const newPos = cur.clone().add(along);
+            const dir = next.clone().sub(cur).normalize();
+            const stepLen = Math.min(remaining, segLen);
+            const newPos = cur.clone().add(dir.clone().multiplyScalar(stepLen));
             char.position.lerp(newPos, 1);
-            char.position.y = Math.abs(Math.sin(time * 10)) * 0.05;
-            char.rotation.y = Math.atan2(along.x, along.z);
-            remaining -= segLen;
+            char.rotation.y = Math.atan2(dir.x, dir.z);
+            remaining -= stepLen;
+            moved += stepLen;
+            cur = newPos;
             walkPath.i += 1;
-            cur = next;
           }
+          // Accumulate a continuous walk phase from real distance travelled
+          // so the leg swing stays in sync with speed and never snaps.
+          const ph = walkPhaseRef.current.get(agent.id) ?? 0;
+          walkPhaseRef.current.set(agent.id, ph + moved * 2.0);
+          char.position.y = 0;
           if (walkPath.i >= walkPath.pts.length - 1) {
             char.position.copy(walkPath.pts[walkPath.pts.length - 1]);
             walkPathRef.current.delete(agent.id);
@@ -249,35 +378,105 @@ export default function Office3D({ agents, onAgentClick }: Props) {
           char.position.y = 0;
         }
 
-        switch (behavior.state) {
-          case 'working':
-            char.children.forEach((child, i) => {
-              if (child.userData?.isArm) {
-                (child as THREE.Mesh).rotation.x = Math.sin(time * 8 + i) * 0.15;
-              }
-            });
-            break;
-          case 'idle':
-            char.position.y = Math.sin(time * 2) * 0.02;
-            break;
-          case 'meeting':
-          case 'coffee':
-            // Seated at the table / lounge — relaxed, occasional arm motion.
-            char.children.forEach((child, i) => {
-              if (child.userData?.isArm) {
-                (child as THREE.Mesh).rotation.x = Math.sin(time * 1.5 + i) * 0.06;
-              }
-            });
-            break;
+        // Articulated rig animation. Drives the joint pivots (legs/arms)
+        // with a phase-based walk swing, seated typing, meeting gestures,
+        // and a subtle idle sway. No snapping; blends by walking phase.
+        const phase = walkPhaseRef.current.get(agent.id) ?? 0;
+        const rig = rigOf(char);
+        if (rig) {
+          // Forward (+Z) is travel direction; rotate the rig's local facing
+          // to match the group's world yaw. The group already points travel;
+          // we just offset the body so it reads as "facing the desk/camera".
+          const moving = walkPath.i < walkPath.pts.length - 1;
+          if (moving) {
+            const p = phase;
+            rig.legs[0].rotation.x = Math.sin(p) * 0.6;
+            rig.legs[1].rotation.x = -Math.sin(p) * 0.6;
+            rig.arms[0].rotation.x = -Math.sin(p) * 0.4;
+            rig.arms[1].rotation.x = Math.sin(p) * 0.4;
+            // Subtle head bob to sell the gait.
+            rig.head.position.y = 0.95 + Math.abs(Math.sin(p)) * 0.02;
+          } else {
+            // Ease joints back to neutral when the character is stationary.
+            const k = 0.12;
+            rig.legs[0].rotation.x = THREE.MathUtils.lerp(rig.legs[0].rotation.x, 0, k);
+            rig.legs[1].rotation.x = THREE.MathUtils.lerp(rig.legs[1].rotation.x, 0, k);
+            rig.arms[0].rotation.x = THREE.MathUtils.lerp(rig.arms[0].rotation.x, 0, k);
+            rig.arms[1].rotation.x = THREE.MathUtils.lerp(rig.arms[1].rotation.x, 0, k);
+          }
+
+          switch (behavior.state) {
+            case 'working':
+              // Seated typing: forearms tap toward the desk.
+              rig.arms[0].rotation.x = -1.2 + Math.sin(time * 9) * 0.06;
+              rig.arms[1].rotation.x = -1.2 + Math.sin(time * 9 + 1.4) * 0.06;
+              break;
+            case 'idle':
+              // Standing, breathing sway.
+              rig.arms[0].rotation.x = Math.sin(time * 1.5) * 0.05;
+              rig.arms[1].rotation.x = -Math.sin(time * 1.5) * 0.05;
+              rig.head.rotation.y = Math.sin(time * 0.5) * 0.1;
+              break;
+            case 'meeting':
+            case 'coffee':
+              // Seated: relaxed arms, occasional nod/talk gesture.
+              rig.arms[0].rotation.x = -0.5 + Math.sin(time * 1.2) * 0.05;
+              rig.arms[1].rotation.x = -0.5 + Math.cos(time * 1.2) * 0.05;
+              rig.head.rotation.x = Math.sin(time * 2.5) * 0.08;
+              break;
+          }
+
+          const glow = rig.glow;
+          if (glow) {
+            const gm = glow.material as THREE.MeshBasicMaterial;
+            gm.opacity = 0.3 + Math.sin(time * 3) * 0.1;
+            glow.scale.setScalar(1 + Math.sin(time * 2) * 0.1);
+          }
         }
 
-        const glow = char.children.find((c: THREE.Object3D) => c.userData?.isGlow) as THREE.Mesh | undefined;
-        if (glow) {
-          const gm = glow.material as THREE.MeshBasicMaterial;
-          gm.opacity = 0.3 + Math.sin(time * 3) * 0.1;
-          glow.scale.setScalar(1 + Math.sin(time * 2) * 0.1);
+        // GLB AnimationMixer: drive skeletal clips when GLB is active.
+        // ponytail: only one action at a time (idle/walk/meeting); upgrade
+        // to ActionState blending with cross-fade when a production asset
+        // with more clips is available.
+        const mixer = mixersRef.current.get(agent.id);
+        if (mixer && glbState.loaded) {
+          const moving = walkPath && walkPath.i < walkPath.pts.length - 1;
+          let actionName: string;
+          if (moving) actionName = 'walk';
+          else if (behavior.state === 'meeting' || behavior.state === 'coffee') actionName = 'meeting';
+          else actionName = 'idle';
+          const clip = glbState.clips[actionName as keyof typeof glbState.clips];
+          if (clip) {
+            // Create an action on first use per clip; reuse thereafter.
+            let action = mixerExistingActions.current.get(agent.id + ':' + actionName);
+            if (!action) {
+              action = mixer.clipAction(clip);
+              action.setLoop(THREE.LoopRepeat, Infinity);
+              mixerExistingActions.current.set(agent.id + ':' + actionName, action);
+            }
+            if (!action.isRunning()) {
+              action.reset();
+            }
+            action.play();
+            mixer.update(dt);
+          }
         }
       });
+
+      // ── Camera focus lerp (§12): when an agent is focused, ease the orbit
+      // target toward that character's position; when unfocused, return to origin.
+      const focusId = focusedAgentRef.current;
+      if (focusId) {
+        const focusChar = characterMeshesRef.current.get(focusId);
+        if (focusChar) {
+          orbit.target.lerp(new THREE.Vector3(focusChar.position.x, 1, focusChar.position.z), 0.06);
+          orbit.radius = THREE.MathUtils.lerp(orbit.radius, 14, 0.04);
+        }
+      } else {
+        orbit.target.lerp(new THREE.Vector3(0, 0, 0), 0.04);
+        orbit.radius = THREE.MathUtils.lerp(orbit.radius, 35, 0.03);
+      }
+      updateOrbit();
 
       renderer.render(scene, camera);
     };
@@ -345,9 +544,12 @@ export default function Office3D({ agents, onAgentClick }: Props) {
       const clickedAgent = doRaycast();
       if (clickedAgent) {
         setSelectedAgent(clickedAgent);
+        focusedAgentRef.current = clickedAgent.id;
         onAgentClick?.(clickedAgent);
       } else {
         setSelectedAgent(null);
+        focusedAgentRef.current = null;
+        onAgentClick?.(null);
       }
     };
 
@@ -381,6 +583,13 @@ export default function Office3D({ agents, onAgentClick }: Props) {
       container.removeEventListener('click', onClick);
       container.removeEventListener('wheel', onWheel);
       cancelAnimationFrame(animRef.current);
+      // Dispose animation mixers
+      mixersRef.current.forEach(m => {
+        m.stopAllAction();
+        m.uncacheRoot(m.getRoot());
+      });
+      mixersRef.current.clear();
+      mixerExistingActions.current.clear();
       renderer.dispose();
       scene.traverse(obj => {
         if (obj instanceof THREE.Mesh) {
@@ -448,7 +657,8 @@ export default function Office3D({ agents, onAgentClick }: Props) {
           <div>Right-click drag: Orbit</div>
           <div>Scroll: Zoom</div>
           <div>Shift+Drag: Pan</div>
-          <div>Click: Select agent</div>
+          <div>Click: Select + focus camera</div>
+          <div>Click empty: Unfocus</div>
         </div>
       </div>
     </div>

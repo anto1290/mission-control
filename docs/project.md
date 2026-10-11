@@ -79,7 +79,7 @@ Preferred technologies:
 - A navigation mesh or graph-based navigation system for walking.
 - React state management or the project's existing state architecture.
 
-> **Note:** the current implementation uses raw **Three.js** in a custom rAF renderer (not React Three Fiber), with primitive characters instead of GLB. R3F/GLB/SkinnedMesh remain the target for the character-upgrade phase; the navigation graph (grid A*) is already in place.
+> **Note:** the current implementation uses raw **Three.js** in a custom rAF renderer (not React Three Fiber). Characters use a rigged GLB (RobotExpressv2, CC0) with AnimationMixer when loaded, falling back to a procedural joint-pivot humanoid. The navigation graph (grid A*) is already in place.
 
 Use the existing dependency versions and conventions.
 
@@ -544,7 +544,7 @@ Implement the project in these phases.
 > |-------|-------|--------|
 > | A | Repository audit | ✅ Done |
 > | B | Office environment | ✅ Done — `app/components/office/environment.ts` (Three.js scene: floor, walls, windows, glass partitions, desks, monitors, chairs, meeting/lounge, plants, lighting, seats) |
-> | C | Character integration | ⚠️ Partial — characters are primitive THREE.js figures (cylinders + glow ring) driven by a procedural animation loop in `Office3D.tsx`, **not** rigged GLB/SkinnedMesh/AnimationMixer as the spec prefers. No external asset license yet. |
+> | C | Character integration | ✅ Done — characters load a rigged GLB (RobotExpressv2, CC0) with AnimationMixer for idle/walk/meeting clips; procedural joint-pivot humanoid as fallback when GLB fails. |
 > | D | Movement system | ✅ Done — `app/components/office/pathfinding.ts` (grid A*), `test-pathfinding.ts` passes; walking uses frame-delta time and routes through door gaps, no wall clipping observed |
 > | E | Behavior system | ⚠️ Partial — data-driven target resolution in `Office3D.tsx` (status/room/task → destination + behavior state); room rotation in `lib/api-remote.ts` is time-slot driven (5-min window), not calendar/agent-event driven |
 > | F | Dashboard | ⚠️ Partial — agent roster, active-count badge, legend, hover/select raycasting, nameplates; no dedicated employee detail panel or activity timeline yet |
@@ -660,25 +660,26 @@ Provide:
   - `app/components/office/pathfinding.ts` — grid A* (`Pathfinder`), bounds `x:[-20,20] z:[-12,12]`, wall/door obstacles; `test-pathfinding.ts` verifies routes pass through door gaps.
   - `app/components/Office3D.tsx` — WebGL renderer (rAF loop), procedural characters, raycast select/hover, walk-path following, behavior-state animation.
   - `app/office/page.tsx` — dashboard shell (roster, active count, legend, selection state) around `<Office3D>`.
-  - `lib/api-remote.ts` — time-slot room rotation (`slot = floor(Date.now()/300_000)`, `(index+slot)%5` → Meeting/Lounge/Workspace) drives which room each task-less agent is sent to.
-  - `office3d.b64` deleted (superseded by the live Three.js scene). `lib/office-renderer.ts` remains but is unused/dead — superseded by `Office3D.tsx`; candidate for deletion.
+  - `lib/api-remote.ts` — event-driven room resolution: active task → Workspace, cron `nextRun` < 15 min → Meeting (`reason:'scheduled'`), offline → Lounge (`reason:'idle'`), deterministic per-agent+hour hash fallback. Replaces time-slot rotation.
+  - `office3d.b64` deleted (superseded by the live Three.js scene). `lib/office-renderer.ts` deleted (dead code; superseded by `Office3D.tsx`).
 
-- **Character assets & animation:** none loaded from an external source. Characters are procedurally built Three.js primitives with a hand-rolled animation loop (arm swing on walk, typing on `working`, etc.). No SkinnedMesh/GLB, no AnimationMixer. This is the main gap against §5/§6.
+- **Character assets & animation:** rigged GLB (RobotExpressv2, CC0, from three.js examples) loaded via GLTFLoader + AnimationMixer for idle/walk/meeting clips. Falls back to a procedurally-rigged Three.js humanoid (joint pivots at hips/shoulders, `createCharacter` in `Office3D.tsx`) when the GLB fails to load.
 
 - **Navigation:** grid A* (Phase D approach from §8's "navigation grid" option). Path is computed on target change, not per frame; movement uses frame delta time; orientation set to travel direction.
 
-- **Behavior:** data-driven, not random. Target = f(status, room, task); transitions only when the input signature changes. Room rotation is simulation-only (time slot), clearly not real agent events.
+- **Behavior:** data-driven, not random. Target = f(status, room, task, reason, scheduledJob); transitions only when the input signature changes. Room resolution is event-driven: active task → Workspace, imminent cron job → Meeting, offline → Lounge; deterministic per-agent hash covers idle fallback.
 
-- **AI vs simulation:** simulation-only for room placement; agent status/room/task reflect the real data returned by the office API.
+- **AI vs simulation:** simulation-only for room placement; agent status/room/task/scheduledJob reflect the real data returned by the office API.
 
 - **Commands/tests executed:** `tsc --noEmit` clean; `node test-pathfinding.ts` PASS; production `next build` clean; live scene inspected in browser (10 agents rendered, cross-room paths observed, no console errors).
 
 - **Known limitations / next steps:**
-  1. Replace primitive characters with rigged GLB + AnimationMixer (§5/§6) — highest remaining visual gap.
-  2. Add an employee detail panel and activity timeline (§11).
-  3. Drive room placement from real agent events/calendar rather than a time slot (§10).
-  4. Delete dead `lib/office-renderer.ts`.
-  5. Add follow-camera + per-employee focus (§12) if required.
+  1. ~~**Character rig (Phase C) — done this round:** replaced flat primitive figures with a procedurally-jointed humanoid (hip/shoulder pivots) + per-frame articulated animation. GLB/SkinnedMesh/AnimationMixer still outstanding.~~ ✅ Done — GLB (RobotExpressv2, CC0) + AnimationMixer wired; procedural rig as fallback.
+  2. ~~Select a rigged GLB character asset + compatible clips, wire into `Office3D.tsx` to fully close §5/§6.~~ ✅ Done — RobotExpressv2.glb loaded via GLTFLoader; idle/walk/meeting clips mapped to AnimationMixer.
+  3. ~~Add an employee detail panel and activity timeline (§11).~~ ✅ Done — `page.tsx` now renders a `selected` agent side-panel (model, status, reason badge, task, scheduled job, recent sessions from `/api/activity`).
+  4. ~~Drive room placement from real agent events/calendar rather than a time slot (§10).~~ ✅ Done — `getOffice()` uses active tasks, cron `nextRun`, offline status, and a deterministic per-agent+hour hash.
+  5. ~~Delete dead `lib/office-renderer.ts` (one-line removal; confirmed unreferenced).~~ ✅ Done.
+  6. ~~Add follow-camera + per-employee focus (§12) if required.~~ ✅ Done — click an agent to focus the camera; click empty space to unfocus.
 
 FINAL REQUIREMENT:
 
