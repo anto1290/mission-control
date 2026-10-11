@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Reduce build memory usage
+  turbopack: {},
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-*'],
   },
