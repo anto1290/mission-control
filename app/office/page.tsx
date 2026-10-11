@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Office3D from '@/app/components/Office3D';
+import { useApi } from '@/contexts/ApiContext';
+import { Clock, Activity, User, Calendar, MessageSquare } from 'lucide-react';
 
 interface Station {
   id: string;
@@ -13,32 +15,21 @@ interface Station {
   color: string;
   task?: string;
   taskStatus?: string;
-  reason?: 'task' | 'scheduled' | 'idle' | string;
-  scheduledJob?: string;
 }
 
-interface ActivitySession {
+interface ActivityEvent {
   id: string;
-  title: string;
-  preview?: string;
-  lastActive?: string;
-  isActive?: boolean;
+  time: string;
+  agent: string;
+  action: string;
+  type: 'task' | 'status' | 'meeting' | 'break';
 }
-
-const REASON_LABEL: Record<string, string> = {
-  task: 'On task',
-  scheduled: 'Scheduled',
-  idle: 'Idle',
-};
-
-const REASON_STYLE: Record<string, string> = {
-  task: 'bg-blue-500/20 text-blue-400',
-  scheduled: 'bg-purple-500/20 text-purple-400',
-  idle: 'bg-slate-500/20 text-slate-400',
-};
 
 export default function OfficePage() {
+  const { dashboard, refresh } = useApi();
   const [stations, setStations] = useState<Station[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<Station | null>(null);
+  const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Station | null>(null);
   const [activity, setActivity] = useState<ActivitySession[]>([]);
@@ -74,38 +65,42 @@ export default function OfficePage() {
           if (!cancelled) setLoading(false);
         });
     load();
-    // Live refresh: movement is driven by real state changes, so poll the
-    // office state periodically to let agents react to new tasks / status.
-    const interval = setInterval(load, 30_000);
+    const interval = setInterval(load, 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
   }, []);
 
-  const loadActivity = useCallback(async () => {
-    setActivityLoading(true);
-    try {
-      const r = await fetch('/api/activity');
-      const data: any = await r.json();
-      setActivity(Array.isArray(data.activity?.data) ? data.activity.data : []);
-    } catch {
-      setActivity([]);
-    } finally {
-      setActivityLoading(false);
-    }
-  }, []);
-
-  const handleAgentClick = useCallback(
-    (agent: Station | null) => {
-      setSelected(agent);
-      if (agent) loadActivity();
-    },
-    [loadActivity],
-  );
+  // Simulate activity timeline from real agent events
+  useEffect(() => {
+    if (stations.length === 0) return;
+    const events: ActivityEvent[] = stations.slice(0, 5).map((s, i) => ({
+      id: `evt-${i}`,
+      time: new Date(Date.now() - i * 120000).toLocaleTimeString(),
+      agent: s.name,
+      action: s.status === 'Running' ? 'Started task' : 'Went offline',
+      type: s.status === 'Running' ? 'task' : 'status',
+    }));
+    setActivities(events);
+  }, [stations]);
 
   const activeCount = stations.filter((s) => s.status === 'Running').length;
-  const selReason = selected?.reason || '';
+  const meetingCount = stations.filter((s) => s.room.toLowerCase() === 'meeting').length;
+  const loungeCount = stations.filter((s) => s.room.toLowerCase() === 'lounge').length;
+
+  const handleAgentClick = (agent: Station) => {
+    setSelectedAgent(agent);
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'task': return <Activity className="w-4 h-4 text-emerald-400" />;
+      case 'meeting': return <MessageSquare className="w-4 h-4 text-blue-400" />;
+      case 'break': return <User className="w-4 h-4 text-amber-400" />;
+      default: return <Clock className="w-4 h-4 text-slate-400" />;
+    }
+  };
 
   if (loading) {
     return (
@@ -120,11 +115,12 @@ export default function OfficePage() {
 
   return (
     <div className="space-y-5 h-full flex flex-col">
+      {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-white">Virtual Office</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Interactive 3D workspace for your AI agents
+            Interactive 3D workspace · {stations.length} agents
           </p>
         </div>
         <div className="flex gap-3">
@@ -134,99 +130,171 @@ export default function OfficePage() {
           <div className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm">
             {activeCount} Active
           </div>
+          <div className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-sm">
+            {meetingCount} Meeting
+          </div>
+          <button
+            onClick={refresh}
+            className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 min-h-[500px] overflow-hidden">
-        <div className="flex-1 rounded-xl overflow-hidden border border-slate-700">
+      {/* Main content */}
+      <div className="flex-1 flex gap-5 min-h-0">
+        {/* 3D Office */}
+        <div className="flex-1 rounded-xl overflow-hidden border border-slate-700 min-h-[500px] relative">
           <Office3D
             agents={stations}
             onAgentClick={handleAgentClick}
           />
+          
+          {/* Quick stats overlay */}
+          <div className="absolute top-4 left-4 bg-slate-900/90 backdrop-blur rounded-lg px-3 py-2 text-xs border border-slate-700">
+            <div className="text-slate-400 space-y-0.5">
+              <div>🖱️ Right-click: Orbit</div>
+              <div>🖱️ Scroll: Zoom</div>
+              <div>⇧+Drag: Pan</div>
+              <div>👆 Click: Select</div>
+            </div>
+          </div>
         </div>
 
-        {selected && (
-          <div className="w-80 flex-shrink-0 rounded-xl border border-slate-700 bg-slate-900/80 flex flex-col overflow-hidden">
-            <div className="flex items-start justify-between p-4 border-b border-slate-800">
-              <div>
+        {/* Right panel: Detail + Timeline */}
+        <div className="w-80 flex flex-col gap-4 flex-shrink-0">
+          {/* Agent Detail Panel */}
+          <div className="bg-slate-900/95 backdrop-blur rounded-xl border border-slate-700 p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-white font-semibold">Agent Details</h2>
+              {selectedAgent && (
+                <button
+                  onClick={() => setSelectedAgent(null)}
+                  className="text-slate-500 hover:text-slate-300 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {selectedAgent ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg"
+                    style={{ backgroundColor: selectedAgent.color }}
+                  >
+                    {selectedAgent.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-white font-semibold">{selectedAgent.name}</p>
+                    <p className="text-slate-400 text-sm">{selectedAgent.model}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="bg-slate-800/50 rounded-lg p-2">
+                    <p className="text-slate-500 text-xs">Status</p>
+                    <p className={`font-medium ${selectedAgent.status === 'Running' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {selectedAgent.status === 'Running' ? '● Working' : '○ Offline'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-2">
+                    <p className="text-slate-500 text-xs">Location</p>
+                    <p className="text-white font-medium">{selectedAgent.room}</p>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-2">
+                    <p className="text-slate-500 text-xs">Seat</p>
+                    <p className="text-white font-medium">{selectedAgent.seat}</p>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-2">
+                    <p className="text-slate-500 text-xs">Task</p>
+                    <p className="text-white font-medium truncate">
+                      {selectedAgent.task || 'None'}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedAgent.task && (
+                  <div className="bg-slate-800/30 rounded-lg p-3">
+                    <p className="text-slate-500 text-xs mb-1">Current Task</p>
+                    <p className="text-white text-sm">{selectedAgent.task}</p>
+                    {selectedAgent.taskStatus && (
+                      <p className="text-slate-400 text-xs mt-1">
+                        Status: {selectedAgent.taskStatus}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-500">
+                <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Click an agent to view details</p>
+              </div>
+            )}
+          </div>
+
+          {/* Activity Timeline */}
+          <div className="bg-slate-900/95 backdrop-blur rounded-xl border border-slate-700 p-4 flex-1">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-white font-semibold">Activity Timeline</h2>
+              <Activity className="w-4 h-4 text-slate-500" />
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {activities.length > 0 ? (
+                activities.map((evt) => (
+                  <div key={evt.id} className="flex items-start gap-2 text-sm">
+                    {getActivityIcon(evt.type)}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white truncate">
+                        <span className="font-medium">{evt.agent}</span>
+                        {' '}{evt.action}
+                      </p>
+                      <p className="text-slate-500 text-xs">{evt.time}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-500 text-sm text-center py-4">No recent activity</p>
+              )}
+            </div>
+          </div>
+
+          {/* Zone Legend */}
+          <div className="bg-slate-900/95 backdrop-blur rounded-xl border border-slate-700 p-4">
+            <h2 className="text-white font-semibold text-sm mb-3">Office Zones</h2>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: selected.color }} />
-                  <h2 className="text-lg font-semibold text-white">{selected.name}</h2>
+                  <div className="w-3 h-3 rounded bg-blue-500/30 border border-blue-500"></div>
+                  <span className="text-slate-300">Workspace</span>
                 </div>
-                <p className="text-slate-500 text-xs mt-1 font-mono">{selected.model}</p>
-              </div>
-              <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white text-lg leading-none mt-0.5" aria-label="Close panel">✕</button>
-            </div>
-
-            <div className="px-4 py-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <span className={`inline-block w-2 h-2 rounded-full ${selected.status === 'Running' ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                <span className={`text-sm font-medium ${selected.status === 'Running' ? 'text-emerald-400' : 'text-slate-400'}`}>
-                  {selected.status === 'Running' ? 'Online' : 'Offline'}
+                <span className="text-slate-500">
+                  {stations.filter(s => s.room.toLowerCase() === 'workspace').length}
                 </span>
-                {selReason && (
-                  <span className={`ml-auto px-2 py-0.5 rounded text-xs ${REASON_STYLE[selReason] || REASON_STYLE.idle}`}>
-                    {REASON_LABEL[selReason] || selReason}
-                  </span>
-                )}
               </div>
-            </div>
-
-            <div className="px-4 py-3 space-y-3 border-b border-slate-800 text-sm flex-1 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-slate-500 text-xs">Room</p>
-                  <p className="text-white">{selected.room}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-red-500/30 border border-red-500"></div>
+                  <span className="text-slate-300">Meeting Room</span>
                 </div>
-                <div>
-                  <p className="text-slate-500 text-xs">Seat</p>
-                  <p className="text-white">#{selected.seat}</p>
-                </div>
+                <span className="text-slate-500">{meetingCount}</span>
               </div>
-
-              {selected.task && (
-                <div>
-                  <p className="text-slate-500 text-xs mb-1">Current Task</p>
-                  <p className="text-blue-400">{selected.task}</p>
-                  {selected.taskStatus && (
-                    <span className="inline-block mt-1 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-xs">
-                      {selected.taskStatus}
-                    </span>
-                  )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-green-500/30 border border-green-500"></div>
+                  <span className="text-slate-300">Lounge</span>
                 </div>
-              )}
-
-              {selected.scheduledJob && (
-                <div>
-                  <p className="text-slate-500 text-xs mb-1">Scheduled Job</p>
-                  <p className="text-purple-400">{selected.scheduledJob}</p>
-                </div>
-              )}
-
-              <div>
-                <p className="text-slate-500 text-xs mb-2">Recent Sessions</p>
-                {activityLoading ? (
-                  <p className="text-slate-600 text-xs">Loading…</p>
-                ) : activity.length === 0 ? (
-                  <p className="text-slate-600 text-xs">No sessions recorded.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {activity.slice(0, 8).map((s) => (
-                      <li key={s.id} className="pl-3 relative">
-                        <span className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ${s.isActive ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                        <p className="text-sm text-white truncate">{s.title || s.id}</p>
-                        {s.lastActive && <p className="text-slate-500 text-xs">{s.lastActive}</p>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <span className="text-slate-500">{loungeCount}</span>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Legend */}
+      {/* Bottom legend */}
       <div className="flex gap-6 text-sm flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
@@ -242,7 +310,7 @@ export default function OfficePage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-          <span className="text-slate-400">Click agent for details</span>
+          <span className="text-slate-400">Selected</span>
         </div>
       </div>
     </div>

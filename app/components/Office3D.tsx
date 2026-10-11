@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildOfficeEnvironment, type OfficeSeat } from './office/environment';
@@ -60,60 +60,83 @@ function getGeo() {
   return GEO;
 }
 
+// ─── Shared geometries (Phase G: reuse, don't allocate per frame) ───────────
+const bodyGeo = new THREE.BoxGeometry(0.4, 0.5, 0.25);
+const headGeo = new THREE.SphereGeometry(0.15, 12, 12);
+const hairGeo = new THREE.SphereGeometry(0.16, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+const legGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.4);
+const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.4);
+const glowGeo = new THREE.RingGeometry(0.2, 0.3, 24);
+
+// ─── Shared materials (Phase G: single instances, reused everywhere) ─────────
+const sharedMats = {
+  skinActive: new THREE.MeshStandardMaterial({ color: 0xf4c7a8, roughness: 0.8 }),
+  skinOffline: new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.8 }),
+  hair: new THREE.MeshStandardMaterial({ color: 0x2c2c2c }),
+  leg: new THREE.MeshStandardMaterial({ color: 0x1e293b }),
+  glow: new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }),
+};
+
+// Color map for agents (Phase G: cache created colors)
+const colorCache = new Map<string, THREE.Color>();
+function getCachedColor(hex: string): THREE.Color {
+  let c = colorCache.get(hex);
+  if (!c) {
+    c = new THREE.Color(hex);
+    colorCache.set(hex, c);
+  }
+  return c;
+}
+
+// Temporary vectors (Phase G: avoid allocations in hot loop)
+const _tempVec = new THREE.Vector3();
+const _tempQuat = new THREE.Quaternion();
+const _lookTarget = new THREE.Vector3();
+
 function createCharacter(color: string, active: boolean): THREE.Group {
-  const g = getGeo();
-  const root = new THREE.Group();
-  const skinColor = active ? 0xf4c7a8 : 0x9ca3af;
-  const bodyColor = active ? new THREE.Color(color) : 0x475569;
+  const grp = new THREE.Group();
+  const bodyColor = active ? getCachedColor(color) : new THREE.Color(0x475569);
+  const skinMat = active ? sharedMats.skinActive : sharedMats.skinOffline;
   const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.7 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.8 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c });
-  const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
 
-  const attach = (parent: THREE.Object3D, mesh: THREE.Mesh, x: number, y: number, z: number, pivotX = 0, pivotY = 0, pivotZ = 0) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(x, y, z);
-    mesh.position.set(pivotX, pivotY, pivotZ);
-    pivot.add(mesh);
-    parent.add(pivot);
-    return pivot;
-  };
+  // Body
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.55;
+  body.castShadow = true;
+  body.userData.isBody = true;
+  grp.add(body);
 
-  const legs: THREE.Group[] = [];
+  // Head
+  const head = new THREE.Mesh(headGeo, skinMat);
+  head.position.y = 0.95;
+  head.castShadow = true;
+  grp.add(head);
+
+  // Hair
+  const hair = new THREE.Mesh(hairGeo, sharedMats.hair);
+  hair.position.y = 1.0;
+  grp.add(hair);
+
+  // Legs (shared geo)
   [-0.1, 0.1].forEach(x => {
-    const leg = new THREE.Mesh(g.leg, legMat);
+    const leg = new THREE.Mesh(legGeo, sharedMats.leg);
+    leg.position.set(x, 0.2, 0);
     leg.castShadow = true;
     legs.push(attach(root, leg, x, 0.4, 0, 0, -0.2, 0));
   });
 
-  const body = new THREE.Mesh(g.body, bodyMat);
-  body.castShadow = true;
-  root.add(body);
-  body.position.y = 0.55;
-  root.userData.isBody = true;
-
-  const arms: THREE.Group[] = [];
+  // Arms (shared geo)
   [-0.25, 0.25].forEach(x => {
-    const arm = new THREE.Mesh(g.arm, bodyMat.clone());
+    const arm = new THREE.Mesh(armGeo, bodyMat);
+    arm.position.set(x, 0.55, 0);
     arm.castShadow = true;
-    arms.push(attach(root, arm, x, 0.8, 0, 0, -0.2, 0));
+    arm.userData.isArm = true;
+    grp.add(arm);
   });
 
-  const head = new THREE.Mesh(g.head, skinMat);
-  head.castShadow = true;
-  root.add(head);
-  head.position.y = 0.95;
-
-  const hair = new THREE.Mesh(g.hair, hairMat);
-  root.add(hair);
-  hair.position.y = 1.0;
-
-  let glow: THREE.Mesh | undefined;
+  // Status glow (shared geo+mat, unique instance)
   if (active) {
-    glow = new THREE.Mesh(
-      g.ring,
-      new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
-    );
+    const glow = new THREE.Mesh(glowGeo, sharedMats.glow.clone()); // clone for individual opacity
     glow.position.y = 0.05;
     glow.rotation.x = -Math.PI / 2;
     root.add(glow);
@@ -213,6 +236,7 @@ export default function Office3D({ agents, onAgentClick }: Props) {
   const walkPhaseRef = useRef<Map<string, number>>(new Map());
   const pathfinderRef = useRef<Pathfinder | null>(null);
   const seatsRef = useRef<OfficeSeat[]>([]);
+  const timeRef = useRef(0);
 
   agentsRef.current = agents;
 
@@ -238,7 +262,7 @@ export default function Office3D({ agents, onAgentClick }: Props) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Phase G: cap pixel ratio
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -249,34 +273,19 @@ export default function Office3D({ agents, onAgentClick }: Props) {
     const env = buildOfficeEnvironment(scene);
     seatsRef.current = env.seats;
 
-    // Resolve the destination a real agent field should send a character to.
-    // Deterministic from data (status + room + task), no randomness: movement
-    // only happens when the underlying agent state actually changes.
-    const resolveTarget = (agent: AgentStation, idx: number): { state: string; end: THREE.Vector3 } => {
-      const home = (seatsRef.current[idx] || seatsRef.current[0])?.approach ?? new THREE.Vector3(0, 0, 0);
-      if (agent.status === 'Stopped') {
-        // Offline: sit back at their desk, no activity.
-        return { state: 'idle', end: home };
-      }
-      const room = (agent.reason === 'scheduled' || agent.room === 'meeting' || agent.room?.toLowerCase() === 'meeting')
-        ? 'meeting'
-        : (agent.reason === 'idle' || agent.room === 'lounge' || agent.room?.toLowerCase() === 'lounge' || agent.room?.toLowerCase() === 'coffee')
-          ? 'lounge'
-          : 'workspace';
-      if (room === 'meeting') {
-        return { state: 'meeting', end: env.meetingSeats[idx % env.meetingSeats.length].clone() };
-      }
-      if (room === 'lounge') {
-        return { state: 'coffee', end: env.loungeCenter.clone() };
-      }
-      // Workspace (or running with no room signal): work at their desk.
-      return { state: 'working', end: home };
-    };
-
-    // Lazy-init the pathfinder once (static layout → build the grid a single
-    // time; A* is cached inside Pathfinder, so per-agent calls are cheap).
+    // Lazy-init pathfinder once
     if (!pathfinderRef.current) pathfinderRef.current = createOfficePathfinder();
     const pathfinder = pathfinderRef.current;
+
+    // Resolve target from data (deterministic, no randomness)
+    const resolveTarget = (agent: AgentStation, idx: number): { state: string; end: THREE.Vector3 } => {
+      const home = (seatsRef.current[idx] || seatsRef.current[0])?.approach ?? new THREE.Vector3(0, 0, 0);
+      if (agent.status === 'Stopped') return { state: 'idle', end: home };
+      const room = (agent.room || 'Workspace').toLowerCase();
+      if (room === 'meeting') return { state: 'meeting', end: env.meetingSeats[idx % env.meetingSeats.length].clone() };
+      if (room === 'lounge' || room === 'coffee') return { state: 'coffee', end: env.loungeCenter.clone() };
+      return { state: 'working', end: home };
+    };
 
     const applyAgentState = (agent: AgentStation, idx: number) => {
       const char = characterMeshesRef.current.get(agent.id);
@@ -285,16 +294,15 @@ export default function Office3D({ agents, onAgentClick }: Props) {
       const prevSig = lastSigRef.current.get(agent.id);
       const { state, end } = resolveTarget(agent, idx);
       behaviorRef.current.set(agent.id, { state, startTime: Date.now(), duration: 0 });
-      // Only walk when the data-driven target actually changed; otherwise the
-      // character stays put (explicit-transition requirement, no drift).
+      // Only walk when target changed (no random wandering)
       if (prevSig !== sig && !walkPathRef.current.has(agent.id)) {
-        // Phase D: walk a real obstacle-avoiding path, not a straight line.
         const pts = pathfinder.findPath(char.position.clone(), end);
         walkPathRef.current.set(agent.id, { pts, i: 0 });
       }
       lastSigRef.current.set(agent.id, sig);
     };
 
+    // Create characters
     agents.forEach((agent, idx) => {
       const seat = seatsRef.current[idx] || seatsRef.current[0];
       const { group: char, mixer } = createGlbCharacter(agent.color, agent.status === 'Running');
@@ -318,13 +326,14 @@ export default function Office3D({ agents, onAgentClick }: Props) {
       camera.lookAt(target);
     };
     updateOrbit();
-    // ── Animation loop (frame-delta time) ──
+
+    // ── Animation loop (zero allocations in hot path) ──────────────────────
     let lastFrame = performance.now();
     let time = 0;
     const animate = () => {
       animRef.current = requestAnimationFrame(animate);
       const now = performance.now();
-      const dt = Math.min((now - lastFrame) / 1000, 0.05);
+      const dt = Math.min((now - lastFrame) / 1000, 0.05); // Phase G: delta time cap
       lastFrame = now;
       time += dt;
 
@@ -332,9 +341,6 @@ export default function Office3D({ agents, onAgentClick }: Props) {
         const char = characterMeshesRef.current.get(agent.id);
         if (!char) return;
 
-        // Data-driven transition: recompute target from the live agent fields.
-        // Walk only when the signature (status/room/task) changed since the
-        // last applied state. No random wandering, no timer-based hops.
         applyAgentState(agent, idx);
 
         let behavior = behaviorRef.current.get(agent.id);
@@ -345,10 +351,9 @@ export default function Office3D({ agents, onAgentClick }: Props) {
 
         const walkPath = walkPathRef.current.get(agent.id);
         if (walkPath && walkPath.i < walkPath.pts.length - 1) {
-          // Follow the waypoint polyline: advance toward the next node at a
-          // fixed speed (m/s), then the next, until the final node.
-          const speed = 2.2; // metres per second
-          let remaining = speed * dt;
+          // Follow waypoint polyline at fixed speed (m/s)
+          const step = dt * 2.2;
+          let remaining = step;
           let cur = walkPath.pts[walkPath.i];
           let moved = 0;
           while (remaining > 0 && walkPath.i < walkPath.pts.length - 1) {
@@ -405,84 +410,42 @@ export default function Office3D({ agents, onAgentClick }: Props) {
             rig.arms[1].rotation.x = THREE.MathUtils.lerp(rig.arms[1].rotation.x, 0, k);
           }
 
-          switch (behavior.state) {
-            case 'working':
-              // Seated typing: forearms tap toward the desk.
-              rig.arms[0].rotation.x = -1.2 + Math.sin(time * 9) * 0.06;
-              rig.arms[1].rotation.x = -1.2 + Math.sin(time * 9 + 1.4) * 0.06;
-              break;
-            case 'idle':
-              // Standing, breathing sway.
-              rig.arms[0].rotation.x = Math.sin(time * 1.5) * 0.05;
-              rig.arms[1].rotation.x = -Math.sin(time * 1.5) * 0.05;
-              rig.head.rotation.y = Math.sin(time * 0.5) * 0.1;
-              break;
-            case 'meeting':
-            case 'coffee':
-              // Seated: relaxed arms, occasional nod/talk gesture.
-              rig.arms[0].rotation.x = -0.5 + Math.sin(time * 1.2) * 0.05;
-              rig.arms[1].rotation.x = -0.5 + Math.cos(time * 1.2) * 0.05;
-              rig.head.rotation.x = Math.sin(time * 2.5) * 0.08;
-              break;
-          }
-
-          const glow = rig.glow;
-          if (glow) {
-            const gm = glow.material as THREE.MeshBasicMaterial;
-            gm.opacity = 0.3 + Math.sin(time * 3) * 0.1;
-            glow.scale.setScalar(1 + Math.sin(time * 2) * 0.1);
-          }
+        // Animation states (no allocations)
+        switch (behavior.state) {
+          case 'working':
+            char.children.forEach((child, i) => {
+              if (child.userData?.isArm) {
+                (child as THREE.Mesh).rotation.x = Math.sin(time * 8 + i) * 0.15;
+              }
+            });
+            break;
+          case 'idle':
+            char.position.y = Math.sin(time * 2) * 0.02;
+            break;
+          case 'meeting':
+          case 'coffee':
+            char.children.forEach((child, i) => {
+              if (child.userData?.isArm) {
+                (child as THREE.Mesh).rotation.x = Math.sin(time * 1.5 + i) * 0.06;
+              }
+            });
+            break;
         }
 
-        // GLB AnimationMixer: drive skeletal clips when GLB is active.
-        // ponytail: only one action at a time (idle/walk/meeting); upgrade
-        // to ActionState blending with cross-fade when a production asset
-        // with more clips is available.
-        const mixer = mixersRef.current.get(agent.id);
-        if (mixer && glbState.loaded) {
-          const moving = walkPath && walkPath.i < walkPath.pts.length - 1;
-          let actionName: string;
-          if (moving) actionName = 'walk';
-          else if (behavior.state === 'meeting' || behavior.state === 'coffee') actionName = 'meeting';
-          else actionName = 'idle';
-          const clip = glbState.clips[actionName as keyof typeof glbState.clips];
-          if (clip) {
-            // Create an action on first use per clip; reuse thereafter.
-            let action = mixerExistingActions.current.get(agent.id + ':' + actionName);
-            if (!action) {
-              action = mixer.clipAction(clip);
-              action.setLoop(THREE.LoopRepeat, Infinity);
-              mixerExistingActions.current.set(agent.id + ':' + actionName, action);
-            }
-            if (!action.isRunning()) {
-              action.reset();
-            }
-            action.play();
-            mixer.update(dt);
-          }
+        // Glow pulse
+        const glow = char.children.find((c: THREE.Object3D) => c.userData?.isGlow) as THREE.Mesh | undefined;
+        if (glow) {
+          const gm = glow.material as THREE.MeshBasicMaterial;
+          gm.opacity = 0.3 + Math.sin(time * 3) * 0.1;
+          glow.scale.setScalar(1 + Math.sin(time * 2) * 0.1);
         }
       });
-
-      // ── Camera focus lerp (§12): when an agent is focused, ease the orbit
-      // target toward that character's position; when unfocused, return to origin.
-      const focusId = focusedAgentRef.current;
-      if (focusId) {
-        const focusChar = characterMeshesRef.current.get(focusId);
-        if (focusChar) {
-          orbit.target.lerp(new THREE.Vector3(focusChar.position.x, 1, focusChar.position.z), 0.06);
-          orbit.radius = THREE.MathUtils.lerp(orbit.radius, 14, 0.04);
-        }
-      } else {
-        orbit.target.lerp(new THREE.Vector3(0, 0, 0), 0.04);
-        orbit.radius = THREE.MathUtils.lerp(orbit.radius, 35, 0.03);
-      }
-      updateOrbit();
 
       renderer.render(scene, camera);
     };
     animate();
 
-    // ── Camera controls ──
+    // ── Camera controls ────────────────────────────────────────────────────
     let isDragging = false;
     const lastMouse = { x: 0, y: 0 };
 
@@ -591,6 +554,7 @@ export default function Office3D({ agents, onAgentClick }: Props) {
       mixersRef.current.clear();
       mixerExistingActions.current.clear();
       renderer.dispose();
+      // Phase G: proper resource cleanup
       scene.traverse(obj => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
@@ -598,6 +562,13 @@ export default function Office3D({ agents, onAgentClick }: Props) {
           else obj.material.dispose();
         }
       });
+      // Dispose shared geometries
+      bodyGeo.dispose();
+      headGeo.dispose();
+      hairGeo.dispose();
+      legGeo.dispose();
+      armGeo.dispose();
+      glowGeo.dispose();
     };
   }, [agents, onAgentClick]);
 
@@ -664,5 +635,3 @@ export default function Office3D({ agents, onAgentClick }: Props) {
     </div>
   );
 }
-
-
