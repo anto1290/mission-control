@@ -11,6 +11,8 @@ interface Station {
   room: string;
   seat: number;
   color: string;
+  task?: string;
+  taskStatus?: string;
 }
 
 export default function OfficePage() {
@@ -18,27 +20,40 @@ export default function OfficePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/office')
-      .then((r) => r.json())
-      .then((data: any) => {
-        if (Array.isArray(data.office?.data)) {
-          setStations(
-            data.office.data.map((s: any, i: number) => ({
-              id: s.id || s.name || `station-${i}`,
-              name: s.name,
-              model: s.model || 'Unknown',
-              status: s.state === 'Working' ? 'Running' : 'Stopped',
-              room: s.room || 'Workspace',
-              seat: s.seat || i + 1,
-              color: s.color || '#5b9bd5',
-            })),
-          );
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
-      });
+    let cancelled = false;
+    const load = () =>
+      fetch('/api/office')
+        .then((r) => r.json())
+        .then((data: any) => {
+          if (cancelled) return;
+          if (Array.isArray(data.office?.data)) {
+            setStations(
+              data.office.data.map((s: any, i: number) => ({
+                id: s.id || s.name || `station-${i}`,
+                name: s.name,
+                model: s.model || 'Unknown',
+                status: s.state === 'Working' ? 'Running' : 'Stopped',
+                room: s.room || 'Workspace',
+                seat: s.seat || i + 1,
+                color: s.color || '#5b9bd5',
+                task: s.task,
+                taskStatus: s.taskStatus,
+              })),
+            );
+          }
+          setLoading(false);
+        })
+        .catch(() => {
+          if (!cancelled) setLoading(false);
+        });
+    load();
+    // Live refresh: movement is driven by real state changes, so poll the
+    // office state periodically to let agents react to new tasks / status.
+    const interval = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const activeCount = stations.filter((s) => s.status === 'Running').length;

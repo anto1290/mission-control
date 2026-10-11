@@ -145,22 +145,51 @@ export async function getChannels() {
 
 export async function getOffice() {
   try {
-    const response = await fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    // Fetch profiles + task board in parallel; tasks are joined onto each
+    // agent by assignee so the office UI can show a real in-progress task.
+    const [profilesRes, tasksData] = await Promise.all([
+      fetch(`${HERMES_API_URL}/api/profiles`, { headers: authHeaders }),
+      getTasks().catch(() => null),
+    ]);
+    if (!profilesRes.ok) throw new Error(`HTTP ${profilesRes.status}`);
 
-    const data = await response.json();
-    const profiles = data.profiles || data;
+    const profiles = (await profilesRes.json()) as any;
+    const list = Array.isArray(profiles.profiles || profiles) ? (profiles.profiles || profiles) : [];
 
-    const stations = (Array.isArray(profiles) ? profiles : []).map((profile: any, index: number) => ({
-      id: profile.name,
-      name: profile.name,
-      model: profile.model,
-      state: profile.gateway_running ? 'Working' : 'Offline',
-      room: ['Workspace', 'Lounge', 'Meeting'][index % 3],
-      seat: index + 1,
-      color: ['#5b9bd5', '#4fb986', '#e07b39', '#9f7aea', '#f59e42', '#f472b6', '#60a5fa', '#a78bfa', '#34d399'][index] || '#5b9bd5',
-      freshness: new Date().toISOString()
-    }));
+    const tasks: any[] = tasksData?.tasks?.data || [];
+    const activeTaskByAssignee = new Map<string, any>();
+    for (const t of tasks) {
+      if (!t.assignee) continue;
+      if (t.status === 'done' || t.status === 'Done') continue;
+      if (!activeTaskByAssignee.has(t.assignee)) activeTaskByAssignee.set(t.assignee, t);
+    }
+
+    const seats = ['#5b9bd5', '#4fb986', '#e07b39', '#9f7aea', '#f59e42', '#f472b6', '#60a5fa', '#a78bfa', '#34d399'];
+    const stations = list.map((profile: any, index: number) => {
+      const running = !!profile.gateway_running;
+      const task = activeTaskByAssignee.get(profile.name);
+      // Data-driven room: an in-flight task pins the agent to their
+      // workspace. Without a task, agents rotate through Meeting / Lounge on
+      // a 5-min window so cross-room A* paths actually fire in the live
+      // scene. `slot` changes once per 300 s → visible walking transitions.
+      const slot = Math.floor(Date.now() / 300_000);
+      const offTask = task ? undefined : (index + slot) % 5;
+      const room = offTask === 0 ? 'Meeting'
+        : offTask === 1 ? 'Lounge'
+        : 'Workspace';
+      return {
+        id: profile.name,
+        name: profile.name,
+        model: profile.model,
+        state: running ? 'Working' : 'Offline',
+        room,
+        task: task ? task.title : undefined,
+        taskStatus: task ? task.status : undefined,
+        seat: index + 1,
+        color: seats[index] || seats[0],
+        freshness: new Date().toISOString()
+      };
+    });
 
     const active = stations.filter(s => s.state === 'Working').length;
     const offline = stations.filter(s => s.state === 'Offline').length;
